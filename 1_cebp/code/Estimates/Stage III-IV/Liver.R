@@ -1,0 +1,104 @@
+### LIVER - Sensitivity (Stage III-IV) Estimates
+setwd("../../../code")
+source("Allcancer_functions.R")
+
+# Load data ---------------------------------------------------------------
+setwd("../data")
+mortality_data <- read_excel("SUMS_Results_Master_final.xlsx", sheet="Master_Mortality_Results")
+surrogate_data <- read_excel("SUMS_Results_Master_final.xlsx", sheet="Master_Surrogate_Results")
+
+mortality_data <- tibble::as_tibble(mortality_data)
+surrogate_data <- tibble::as_tibble(surrogate_data)
+
+
+# PRIMARY ANALYSIS - Estimate Selection -----------------------------------
+
+# Mortality  ---------------------------------------------------------------
+
+mortality_data <-
+  filter_mortality_data(mortality_data, cancer = "Liver")
+
+mortality_data <- mortality_data %>%
+  #rate ratio > relative risk
+  filter(type_indicator == "Rate ratio") %>%
+  calculate_logRR() %>%
+  replace_with_reported()
+
+# Surrogate 1. ------------------------------------------------------
+surrogate_data_1 <-
+  filter_surrogate_data(surrogate_data,
+                        "Liver",
+                        "1./4. Absolute incidence of late / early stage cancer")
+
+
+Qidong <- surrogate_data_1 %>%
+  filter(trial_acronym == "Qidong Liver") %>%
+  # late stage definition: stage III (reported)
+  filter(stage_category == "Stage III") %>%
+  # rate ratio > relative risk
+  filter(type_indicator == "Rate ratio") %>%
+  select(
+    trial_acronym,
+    screening_test,
+    outcome_description,
+    numerator_screening,
+    numerator_comparator,
+    denominator_screening,
+    denominator_comparator,
+    reported_definition_late,
+    reported_definition_early,
+    stage_category
+  )
+
+Qidong <- calculate_logRR(Qidong)
+
+Shanghai <- surrogate_data_1 %>%
+  filter(trial_acronym == "Shanghai Liver") %>%
+  # late stage definition: stage III (reported)
+  filter(stage_category == "Stage III") %>%
+  select(
+    trial_acronym,
+    screening_test,
+    outcome_description,
+    numerator_screening,
+    numerator_comparator,
+    denominator_screening,
+    denominator_comparator,
+    reported_definition_late,
+    reported_definition_early,
+    stage_category
+  )
+
+# only relative risk reported
+Shanghai <- calculate_logrel(Shanghai)
+
+liver_surr1 <- rbind(Qidong, Shanghai)
+
+finaldata_primary_1 <- final_table(mortality_data, liver_surr1)
+
+
+# Surrogate 3. -------------------------------------------------------------
+surrogate_data_3 <-
+  filter_surrogate_data(surrogate_data,
+                        "Liver",
+                        "3. % of target cancer diagnosed at late stage")
+
+liver_surr3 <- surrogate_data_3 %>%
+  select(
+    trial_acronym,
+    screening_test,
+    outcome_description,
+    numerator_screening,
+    numerator_comparator,
+    denominator_screening,
+    denominator_comparator,
+    reported_definition_late,
+    reported_definition_early,
+    stage_category,
+    comparator_other_screening,
+    comparator_noscreening
+  )
+
+liver_surr3 <- calculate_logrel(liver_surr3)
+
+finaldata_primary_3 <- final_table(mortality_data, liver_surr3)

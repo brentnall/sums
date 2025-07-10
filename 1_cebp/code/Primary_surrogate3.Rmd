@@ -1,0 +1,478 @@
+---
+title: "SUMS Primary Analysis Results - Surrogate 3"
+output: html_document
+date: "2024-03-12"
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+
+#Load packages
+library(gdata)
+library(flextable)
+
+#Load bootstrap function
+setwd("../code/Bootstrap")
+source("bootstrap_functions.R")
+
+
+#function to prepare data for analysis
+prep_data <- function (finaldata_primary) {
+  
+  finaldata_primary <- finaldata_primary %>%
+  # calculate weights (inverse variance 1/log(v))
+  mutate(weight_var = 1/vi_m) %>%
+  #only keep trials with available surrogate estimate
+  filter(!is.na(yi_s)) %>%
+  #count trials in analysis
+  mutate(N_trials=n_distinct(trial_acro_sm))
+  
+  return(finaldata_primary)
+}
+
+# create results table for surrogate 3
+results_surrogate_3 <- data.frame(Cancer=character(),
+                                  Surrogate=character(),
+                                  Analysis=character(),
+                                  Ntrials=numeric(),
+                                  Intercept=numeric(),
+                                  Intercept_lb_ci=numeric(),
+                                  Intercept_ub_ci=numeric(),
+                                  Slope=numeric(),
+                                  Slope_lb_ci=numeric(),
+                                  Slope_ub_ci=numeric(),
+                                  Correlation=numeric(),
+                                  Correlation_lb_ci=numeric(),
+                                  Correlation_ub_ci=numeric(),
+                                  Rsquared=numeric(),
+                                  Rsquared_lb_ci=numeric(),
+                                  Rsquared_ub_ci=numeric()
+                                  )
+
+#function to print cancer-specific results
+print_results <- function(results_surrogate_3, cancer) {
+results_surrogate_3 %>%
+  filter(Cancer==cancer)%>%
+  mutate(Slope_lb_ci=ifelse(Slope_lb_ci=="-99999","-Inf",Slope_lb_ci)) %>%
+  mutate(Slope_ub_ci=ifelse(Slope_ub_ci=="99999","Inf",Slope_ub_ci)) %>%
+  flextable() %>%
+  set_header_labels(
+    Ntrials = "N trials",
+    Intercept_lb_ci="Intercept 95% CI; lower",
+    Intercept_ub_ci="Intercept 95% CI; upper",
+    Slope_lb_ci="Slope 95% CI; lower",
+    Slope_ub_ci="Slope 95% CI; upper",
+    Correlation_lb_ci="Correlation 95% CI; lower",
+    Correlation_ub_ci="Correlation 95% CI; upper",
+    Rsquared="R-squared",
+    Rsquared_lb_ci="R-squared 95% CI; lower",
+    Rsquared_ub_ci="R-squared 95% CI; upper") %>%
+  autofit()
+}
+
+#function for cancer-specific plots
+plot_cancer <- function(finaldata_primary_3, cancer){
+  ggplot(finaldata_primary_3, aes(x = exp(yi_s), y = exp(yi_m), label=trial_acro_sm, weight=weight_var)) +
+  stat_smooth(method="lm", colour=NA, fullrange=T)+
+  geom_point(aes(size = weight_var),  shape = 16, colour="darkslateblue") + 
+  geom_abline(intercept = results_surrogate_3$Intercept[results_surrogate_3$Cancer==cancer], slope = results_surrogate_3$Slope[results_surrogate_3$Cancer==cancer]) +
+  geom_abline(intercept=0, slope=1, linetype=2)+
+  geom_hline(yintercept = 1, linetype=3)+
+  geom_vline(xintercept = 1, linetype=3)+
+  labs(x="RR of proportion of cancers diagnosed at late stage", y="RR Mortality")+
+  scale_x_continuous(trans="log", limits = c(0.3,2), breaks=c(0.5,1,1.5, 2))+
+  scale_y_continuous(trans="log", limits = c(0.3,2), breaks=c(0.5,1,1.5, 2))+
+  geom_text(hjust=-0.05, vjust=-0.5)+
+  theme_bw() + 
+  theme(legend.position = "none",plot.caption=element_text(hjust=0), aspect.ratio = 1) 
+  
+}
+```
+
+# Primary analysis
+
+
+## Ovarian
+
+```{r ovarian, echo=FALSE, warning=FALSE}
+
+setwd("../code/Estimates")
+source("Ovarian.R")
+
+gdata::keep(
+  finaldata_primary_3,
+  results_surrogate_3,
+  analysis,
+  prep_data,
+  print_results,
+  plot_cancer,
+  bootstrap_trial,
+  sure = T
+)
+
+
+finaldata_primary_3 <- prep_data(finaldata_primary_3)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_3 <- results_surrogate_3 %>%
+  add_row(analysis(finaldata_primary_3, "Ovarian", "3. Proportion of target cancers diagnosed at late stage", "Primary", bootstrap_trial))
+
+# print results table for cancer
+print_results(results_surrogate_3, "Ovarian")
+
+# bubble plot
+plot_cancer(finaldata_primary_3,"Ovarian")
+
+```
+
+
+## Cervical
+
+```{r cervical, echo=FALSE, warning=FALSE}
+setwd("../code/Estimates")
+source("Cervical.R")
+
+gdata::keep(
+  finaldata_primary_3,
+  results_surrogate_3,
+  analysis,
+  prep_data,
+  print_results,
+  plot_cancer,
+  bootstrap_trial,
+  sure = T
+)
+
+
+finaldata_primary_3 <- prep_data(finaldata_primary_3)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_3 <- results_surrogate_3 %>%
+  add_row(analysis(finaldata_primary_3, "Cervical", "3. Proportion of target cancers diagnosed at late stage", "Primary", bootstrap_trial))
+
+# print results table for cancer
+print_results(results_surrogate_3, "Cervical")
+
+# bubble plot
+plot_cancer(finaldata_primary_3,"Cervical")
+```
+
+
+## Occult
+
+```{r occult, echo=FALSE, warning=FALSE}
+setwd("../code/Estimates")
+source("Occult.R")
+
+gdata::keep(
+  finaldata_primary_3,
+  results_surrogate_3,
+  analysis,
+  prep_data,
+  print_results,
+  plot_cancer,
+  bootstrap_trial,
+  sure = T
+)
+
+
+finaldata_primary_3 <- prep_data(finaldata_primary_3)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_3 <- results_surrogate_3 %>%
+  add_row(analysis(finaldata_primary_3, "Occult", "3. Proportion of target cancers diagnosed at late stage", "Primary", bootstrap_trial))
+
+# print results table for cancer
+print_results(results_surrogate_3, "Occult")
+
+# bubble plot
+plot_cancer(finaldata_primary_3,"Occult")
+```
+
+## Lung
+
+```{r lung, echo=FALSE, warning=FALSE}
+setwd("../code/Estimates")
+source("Lung.R")
+
+gdata::keep(
+  finaldata_primary_3,
+  results_surrogate_3,
+  analysis,
+  prep_data,
+  print_results,
+  plot_cancer,
+  bootstrap_trial,
+  sure = T
+)
+
+
+finaldata_primary_3 <- prep_data(finaldata_primary_3)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_3 <- results_surrogate_3 %>%
+  add_row(analysis(finaldata_primary_3, "Lung", "3. Proportion of target cancers diagnosed at late stage", "Primary", bootstrap_trial))
+
+# print results table for cancer
+print_results(results_surrogate_3, "Lung")
+
+# bubble plot
+plot_cancer(finaldata_primary_3,"Lung")
+```
+
+## Prostate
+
+```{r prostate, echo=FALSE, warning=FALSE}
+setwd("../code/Estimates")
+source("Prostate.R")
+
+gdata::keep(
+  finaldata_primary_3,
+  results_surrogate_3,
+  analysis,
+  prep_data,
+  print_results,
+  plot_cancer,
+  bootstrap_trial,
+  sure = T
+)
+
+
+finaldata_primary_3 <- prep_data(finaldata_primary_3)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_3 <- results_surrogate_3 %>%
+  add_row(analysis(finaldata_primary_3, "Prostate", "3. Proportion of target cancers diagnosed at late stage", "Primary", bootstrap_trial))
+
+# print results table for cancer
+print_results(results_surrogate_3, "Prostate")
+
+# bubble plot
+plot_cancer(finaldata_primary_3,"Prostate")
+
+```
+
+
+## Breast
+
+```{r breast, echo=FALSE, warning=FALSE}
+setwd("../code/Estimates")
+source("Breast.R")
+
+gdata::keep(
+  finaldata_primary_3,
+  results_surrogate_3,
+  analysis,
+  prep_data,
+  print_results,
+  plot_cancer,
+  bootstrap_trial,
+  sure = T
+)
+
+
+finaldata_primary_3 <- prep_data(finaldata_primary_3)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_3 <- results_surrogate_3 %>%
+  add_row(analysis(finaldata_primary_3, "Breast", "3. Proportion of target cancers diagnosed at late stage", "Primary", bootstrap_trial))
+
+# print results table for cancer
+print_results(results_surrogate_3, "Breast")
+
+# bubble plot
+plot_cancer(finaldata_primary_3,"Breast")
+```
+
+## Bowel
+
+```{r bowel, echo=FALSE, warning=FALSE}
+setwd("../code/Estimates")
+source("Bowel.R")
+
+gdata::keep(
+  finaldata_primary_3,
+  results_surrogate_3,
+  analysis,
+  prep_data,
+  print_results,
+  plot_cancer,
+  bootstrap_trial,
+  sure = T
+)
+
+
+finaldata_primary_3 <- prep_data(finaldata_primary_3)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_3 <- results_surrogate_3 %>%
+  add_row(analysis(finaldata_primary_3, "Bowel", "3. Proportion of target cancers diagnosed at late stage", "Primary", bootstrap_trial))
+
+# print results table for cancer
+print_results(results_surrogate_3, "Bowel")
+
+# bubble plot
+plot_cancer(finaldata_primary_3,"Bowel")
+```
+
+## All cancers
+
+```{r all, echo=FALSE, warning=FALSE}
+
+#Load cancer-specific data
+setwd("../code/Estimates")
+source("Ovarian.R")
+ovarian <- finaldata_primary_3 %>%
+  mutate(cancer="Ovarian")
+
+setwd("../code/Estimates")
+source("Cervical.R")
+cervical <- finaldata_primary_3 %>%
+  mutate(cancer="Cervical") %>%
+  #differentiate Mumbai Breast and Cervix
+  mutate(trial_acro_sm=ifelse(trial_acro_sm=="Mumbai Breast Cervix","Mumbai Cervix",trial_acro_sm))
+
+setwd("../code/Estimates")
+source("Liver.R")
+liver <- finaldata_primary_3 %>%
+  mutate(cancer="Liver")
+
+setwd("../code/Estimates")
+source("Nasopharyngeal.R")
+nasopharyngeal <- finaldata_primary_3 %>%
+  mutate(cancer="Nasopharyngeal")
+
+setwd("../code/Estimates")
+source("Oral.R")
+oral <- finaldata_primary_3 %>%
+  mutate(cancer="Oral")
+
+setwd("../code/Estimates")
+source("Occult.R")
+occult <- finaldata_primary_3 %>%
+  mutate(cancer="Occult")
+
+setwd("../code/Estimates")
+source("Lung.R")
+lung <- finaldata_primary_3 %>%
+  mutate(cancer="Lung")
+
+setwd("../code/Estimates")
+source("Prostate.R")
+prostate <- finaldata_primary_3 %>%
+  mutate(cancer="Prostate")
+
+setwd("../code/Estimates")
+source("Breast.R")
+breast <- finaldata_primary_3 %>%
+  mutate(cancer="Breast") %>%
+  #differentiate Mumbai Breast and Cervix
+  mutate(trial_acro_sm=ifelse(trial_acro_sm=="Mumbai Breast Cervix","Mumbai Breast",trial_acro_sm))
+
+setwd("../code/Estimates")
+source("Bowel.R")
+bowel <- finaldata_primary_3 %>%
+  mutate(cancer="Bowel")
+
+gdata::keep(
+  ovarian,
+  cervical,
+  liver,
+  nasopharyngeal,
+  oral,
+  occult,
+  lung,
+  prostate,
+  breast,
+  bowel,
+  results_surrogate_3,
+  prep_data,
+  analysis,
+  bootstrap_trial,
+  min_N_trials,
+  sure = T
+)
+
+all_finaldata_primary_3 <-
+  bind_rows(ovarian,
+            cervical,
+            liver,
+            nasopharyngeal,
+            oral,
+            occult,
+            lung,
+            prostate,
+            breast,
+            bowel)
+
+all_finaldata_primary_3 <- prep_data(all_finaldata_primary_3) 
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_3 <- results_surrogate_3 %>%
+  add_row(analysis(all_finaldata_primary_3, "All", "3. Proportion of target cancers diagnosed at late stage", "Primary", bootstrap_trial))
+
+# print results table for all cancers
+results_surrogate_3 %>%
+  mutate(Slope_lb_ci=ifelse(Slope_lb_ci=="-99999","-Inf",Slope_lb_ci)) %>%
+  mutate(Slope_ub_ci=ifelse(Slope_ub_ci=="99999","Inf",Slope_ub_ci)) %>%
+  flextable() %>%
+  set_header_labels(
+    Ntrials = "N trials",
+    Intercept_lb_ci="Intercept 95% CI; lower",
+    Intercept_ub_ci="Intercept 95% CI; upper",
+    Slope_lb_ci="Slope 95% CI; lower",
+    Slope_ub_ci="Slope 95% CI; upper",
+    Correlation_lb_ci="Correlation 95% CI; lower",
+    Correlation_ub_ci="Correlation 95% CI; upper",
+    Rsquared="R-squared",
+    Rsquared_lb_ci="R-squared 95% CI; lower",
+    Rsquared_ub_ci="R-squared 95% CI; upper") %>%
+  autofit()
+
+# bubble plot
+ggplot(all_finaldata_primary_3, aes(x = exp(yi_s), y = exp(yi_m), weight=weight_var)) +
+  stat_smooth(method="lm", colour=NA, fullrange=T)+
+  geom_point(aes(size = weight_var, colour=cancer), shape = 16) + 
+  geom_abline(data=results_surrogate_3, aes(intercept = Intercept[Cancer=="All"], slope = Slope[Cancer=="All"])) +
+  geom_abline(intercept=0, slope=1, linetype=2)+
+  geom_hline(yintercept = 1, linetype=3)+
+  geom_vline(xintercept = 1, linetype=3)+
+  scale_x_continuous(trans="log", limits = c(0.3,2), breaks=c(0.5,1,1.5, 2))+
+  scale_y_continuous(trans="log", limits = c(0.3,2), breaks=c(0.5,1,1.5, 2))+
+  labs(x="RR of proportion of cancers diagnosed at late stage", y="RR Mortality")+
+  theme_bw() +
+  theme(plot.caption=element_text(hjust=0), aspect.ratio = 1) +
+  guides(size = FALSE)
+```
+
+# Additional plots
+
+```{r plots, echo=FALSE, warning=FALSE}
+
+# Surrogate 3 - by cancer grid
+all_finaldata_primary_3 <- all_finaldata_primary_3 %>%
+  # remove cancer with <3 trials available
+  filter(cancer!="Liver") %>%
+  filter(cancer!="Nasopharyngeal") %>%
+  filter(cancer!="Oral")
+
+ggplot(all_finaldata_primary_3, aes(x = exp(yi_s), y = exp(yi_m), label=trial_acro_sm, weight=weight_var)) +
+  stat_smooth(data=subset(all_finaldata_primary_3, cancer!="Ovarian"), method="lm", colour="black", linewidth=0.6, fullrange=T)+
+  stat_smooth(data=subset(all_finaldata_primary_3, cancer=="Ovarian"), method="lm", colour="black", linewidth=0.6, fullrange=T, se=F)+
+  geom_point(aes(size = weight_var), shape = 16, colour="darkslateblue") +
+  geom_abline(intercept=0, slope=1, linetype=2)+
+  geom_hline(yintercept = 1, linetype=3)+
+  geom_vline(xintercept = 1, linetype=3)+
+  labs(x="RR proportion of cancers diagnosed at late stage", y="RR Mortality")+
+  scale_x_continuous(trans="log", limits = c(0.3,2), breaks=c(0.5,1,1.5, 2)) + 
+  scale_y_continuous(trans="log", limits = c(0.3,2), breaks=c(0.5,1,1.5, 2)) +
+  facet_wrap(~cancer, nrow=2)+
+  theme_bw() +
+  theme(legend.position = "none",plot.caption=element_text(hjust=0), aspect.ratio = 1) 
+
+
+```

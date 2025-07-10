@@ -1,0 +1,233 @@
+---
+title: "Impact of timing"
+output: html_document
+date: "2024-03-19"
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE)
+
+setwd("../code/Estimates/Timepoints")
+
+#function that only keeps trials with at least 2 surrogate timepoints available and calculates weights
+filter_final <- function(data){
+  data <- data %>%
+    filter(!is.na(yi_s)) %>%
+    group_by(trial_acro_sm) %>%
+    filter(n()>1) %>%
+    select(trial_acro_sm, screening_test, yi_m, vi_m, yi_s, timepoint) %>%
+    mutate(timepoint=ifelse(timepoint=="Mortality", "Same as mortality", timepoint)) %>%
+    # inverse variance 1/log(v)
+    mutate(weight_var = 1/vi_m)
+  
+  return(data)
+}
+
+#plot
+plot_timepoints <- function(finaldata_subgroup_1) {
+  
+  ggplot(finaldata_subgroup_1, aes(x = exp(yi_s), y = exp(yi_m), size = weight_var, colour=trial_acro_sm)) +
+  geom_point(aes(shape = timepoint, stroke=1)) +
+  geom_line(aes(group=trial_acro_sm), size=0.5, linetype=2)+
+  scale_shape_manual(values=c(2,1,0), breaks=c("Intervention phase", "Earlier than mortality", "Same as mortality"))+
+  scale_x_continuous(trans="log", limits=c(0.2,2), breaks=c(0.5,1,1.5, 2))+
+  scale_y_continuous(trans="log", limits=c(0.2,2), breaks=c(0.5,1,1.5, 2))+
+  theme_bw() +
+  guides(size = F) +
+  labs(x="RR late stage incidence", y="RR Mortality", colour="Trial", shape="Timing of surrogate")+
+  theme(aspect.ratio = 1)
+  
+  
+}
+```
+
+# All timepoints
+## Bowel
+
+```{r bowel, echo=FALSE, warning=FALSE}
+
+setwd("../code/Estimates/Timepoints")
+source("Bowel_timepoints.R")
+gdata::keep(filter_final, finaldata_subgroup_1, plot_timepoints, sure = T)
+
+finaldata_subgroup_1 <- filter_final(finaldata_subgroup_1) %>%
+  #only have 1 surrogate estimate for each mortality Minnesota estimate
+  filter(trial_acro_sm != "Minnesota")
+
+plot_timepoints(finaldata_subgroup_1)
+
+```
+
+## Breast
+
+```{r breast, echo=FALSE, warning=FALSE}
+setwd("../code/Estimates/Timepoints")
+source("Breast_timepoints.R")
+gdata::keep(filter_final, finaldata_subgroup_1, plot_timepoints,sure = T)
+
+finaldata_subgroup_1 <- filter_final(finaldata_subgroup_1)
+
+plot_timepoints(finaldata_subgroup_1)
+
+
+```
+
+## Lung
+
+```{r lung, echo=FALSE, warning=FALSE}
+setwd("../code/Estimates/Timepoints")
+source("Lung_timepoints.R")
+gdata::keep(filter_final,finaldata_subgroup_1,plot_timepoints, sure=T)
+
+finaldata_subgroup_1 <- filter_final(finaldata_subgroup_1)
+
+plot_timepoints(finaldata_subgroup_1)
+
+
+```
+
+## Prostate
+
+```{r prostate, echo=FALSE, warning=FALSE}
+setwd("../code/Estimates/Timepoints")
+source("Prostate_timepoints.R")
+gdata::keep(filter_final,finaldata_subgroup_1,plot_timepoints, sure=T)
+
+finaldata_subgroup_1 <- filter_final(finaldata_subgroup_1) 
+
+plot_timepoints(finaldata_subgroup_1)
+
+
+```
+
+
+## Ovarian
+```{r ovarian, echo=FALSE, warning=FALSE}
+setwd("../code/Estimates/Timepoints")
+source("Ovarian_timepoints.R")
+gdata::keep(filter_final,finaldata_subgroup_1, sure=T)
+
+finaldata_subgroup_1 <- filter_final(finaldata_subgroup_1) %>%
+  #only have 1 surrogate estimate for each mortality UKCTOCS estimate
+  filter(trial_acro_sm != "UKCTOCS")
+
+ggplot(finaldata_subgroup_1, aes(x = exp(yi_s), y = exp(yi_m), size = weight_var, colour=trial_acro_sm)) +
+  geom_point(aes(shape = timepoint, stroke=1)) +
+  geom_line(aes(group=trial_acro_sm), size=0.5, linetype=2)+
+  scale_shape_manual(values=c(2,0), breaks=c("Intervention phase", "Same as mortality"))+
+  scale_x_continuous(trans="log", limits=c(0.2,2), breaks=c(0.5,1,1.5, 2))+
+  scale_y_continuous(trans="log", limits=c(0.2,2), breaks=c(0.5,1,1.5, 2))+
+  theme_bw() +
+  guides(size = F) +
+  labs(x="RR late stage incidence", y="RR Mortality", colour="Trial", shape="Timing of surrogate") +
+  theme(aspect.ratio = 1)
+
+
+```
+## Ovarian
+```{r ovarian2, echo=FALSE, warning=FALSE}
+setwd("../code/Estimates/Timepoints")
+source("Oral_timepoints.R")
+gdata::keep(filter_final,finaldata_subgroup_1, sure=T)
+
+finaldata_subgroup_1 <- filter_final(finaldata_subgroup_1)
+
+ggplot(finaldata_subgroup_1, aes(x = exp(yi_s), y = exp(yi_m), size = weight_var, colour=trial_acro_sm)) +
+  geom_point(aes(shape = timepoint, stroke=1)) +
+  geom_line(aes(group=trial_acro_sm), size=0.5, linetype=2)+
+  scale_shape_manual(values=c(2,0), breaks=c("Intervention phase", "Same as mortality"))+
+  scale_x_continuous(trans="log", limits=c(0.2,2), breaks=c(0.5,1,1.5, 2))+
+  scale_y_continuous(trans="log", limits=c(0.2,2), breaks=c(0.5,1,1.5, 2))+
+  theme_bw() +
+  guides(size = F) +
+  labs(x="RR late stage incidence", y="RR Mortality", colour="Trial", shape="Timing of surrogate") +
+  theme(aspect.ratio = 1)
+
+
+```
+
+
+## All cancers
+
+```{r all, echo=FALSE, warning=FALSE}
+setwd("../code/Estimates/Timepoints")
+source("Ovarian_timepoints.R")
+ovarian <- finaldata_subgroup_1 %>%
+  mutate(cancer="Ovarian")
+
+
+setwd("../code/Estimates/Timepoints")
+source("Oral_timepoints.R")
+oral <- finaldata_subgroup_1 %>%
+  mutate(cancer="Oral")
+
+setwd("../code/Estimates/Timepoints")
+source("Lung_timepoints.R")
+lung <- finaldata_subgroup_1 %>%
+  mutate(cancer="Lung")
+
+setwd("../code/Estimates/Timepoints")
+source("Prostate_timepoints.R")
+prostate <- finaldata_subgroup_1 %>%
+  mutate(cancer="Prostate")
+
+setwd("../code/Estimates/Timepoints")
+source("Breast_timepoints.R")
+breast <- finaldata_subgroup_1 %>%
+  mutate(cancer="Breast")
+
+setwd("../code/Estimates/Timepoints")
+source("Bowel_timepoints.R")
+bowel <- finaldata_subgroup_1 %>%
+  mutate(cancer="Bowel")
+
+gdata::keep(
+  ovarian,
+  oral,
+  lung,
+  prostate,
+  breast,
+  bowel,
+  filter_final,
+  sure = T
+)
+
+finaldata_subgroup_1 <- bind_rows(ovarian,
+                                     oral,
+                                     lung,
+                                     prostate,
+                                     breast,
+                                     bowel)
+
+finaldata_subgroup_1 <- finaldata_subgroup_1 %>%
+  filter(!is.na(yi_s)) %>%
+  group_by(trial_acro_sm) %>%
+  filter(n()>1) %>%
+  filter(trial_acro_sm!="Minnesota") %>%
+  filter(trial_acro_sm!="UKCTOCS") %>%
+  filter(trial_acro_sm!="Mumbai Breast Cervix") %>%
+  select(cancer, trial_acro_sm, screening_test, yi_m, vi_m, yi_s, timepoint) %>%
+  # inverse variance 1/log(v)
+  mutate(weight_var = 1/vi_m) %>%
+  # create unique identifier for trial/test
+  mutate(trial_test=paste0(trial_acro_sm, screening_test))
+
+finaldata_subgroup_1 <- finaldata_subgroup_1 %>%
+ mutate(timepoint=ifelse(timepoint=="Mortality", "Same as mortality", timepoint))
+
+ggplot(finaldata_subgroup_1, aes(x = exp(yi_s), y = exp(yi_m), size = weight_var, colour=cancer)) +
+  geom_point(aes(shape = timepoint, stroke=1)) +
+  geom_line(aes(group=trial_test), size=0.5, linetype=2)+
+  scale_shape_manual(values=c(2,1,0), breaks=c("Intervention phase", "Earlier than mortality", "Same as mortality"))+
+  scale_x_continuous(trans="log", limits=c(0.2,2), breaks=c(0.5,1,1.5, 2))+
+  scale_y_continuous(trans="log", limits=c(0.2,2), breaks=c(0.5,1,1.5, 2))+
+  theme_bw() +
+  guides(size = F) +
+  labs(x="RR late stage incidence", y="RR Mortality", colour="Cancer", shape="Timing of surrogate") +
+  theme(aspect.ratio = 1)
+
+
+```

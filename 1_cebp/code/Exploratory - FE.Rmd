@@ -1,0 +1,983 @@
+---
+title: "SUMS Exploratory Analysis - FE Meta-Analysis"
+output: html_document
+date: "2025-01-14"
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+
+#Load packages
+library(dplyr)
+library(egg)
+
+#Load bootstrap function
+setwd("../code/Bootstrap")
+source("bootstrap_functions.R")
+
+# Analysis function - Fixed-Effects (FE) model - returns data frame with average effect with 95% CIs
+metatable <- function(data, yi, vi, endpoint, subgroup) {
+
+    model <- rma(data=data, yi=yi, vi=vi, method="FE")
+    
+    ##debug
+    ##  model <- rma(data=all_finaldata_primary_1, yi=all_finaldata_primary_1$yi_m, vi=all_finaldata_primary_1$vi_m, method="FE")
+  
+  surrogate_table <- data.frame(
+    Endpoint=endpoint,
+    Subgroup=subgroup,
+    Effect=model$b[1],
+    CI_lb=model$ci.lb,
+    CI_ub=model$ci.ub,
+    SE=model$se,
+    Z=model$zval
+  )
+  
+  
+  return(surrogate_table)
+  
+}
+
+# function returning table with average effect on mortality and surrogate 1 (using as weights the inverse variance of either mortality (vi_m) or the surrogate (vi_s)) for subgroup of interest
+effects_1 <- function(metatable, data, subgroup){
+  
+  temp_table <- data.frame(
+    Endpoint=character(),
+    Subgroup=character(),
+    Effect=numeric(),
+    CI_lb=numeric(),
+    CI_ub=numeric(),
+    SE=numeric(),
+    Z=numeric()
+  )
+  
+  temp_table <- temp_table %>%
+    #Mortality
+    add_row(metatable(data, data$yi_m, data$vi_m, "Mortality", subgroup)) %>%
+    #Surrogate 1 (surrogate vi as weights)
+    add_row(metatable(data, data$yi_s, data$vi_s, "Surrogate 1 (vi_s)", subgroup)) %>%
+    #Surrogate 1 (mortality vi as weights)
+    add_row(metatable(data, data$yi_s, data$vi_m, "Surrogate 1 (vi_m)", subgroup))
+  
+  return(temp_table)
+}
+
+# function returning table with average effect on surrogate 3 (using as weights the inverse variance of either mortality (vi_m) or the surrogate (vi_s)) for subgroup of interest
+effects_3 <- function(metatable, data, subgroup){
+  
+  temp_table <- data.frame(
+    Endpoint=character(),
+    Subgroup=character(),
+    Effect=numeric(),
+    CI_lb=numeric(),
+    CI_ub=numeric(),
+    SE=numeric(),
+    Z=numeric()
+  )
+  
+  temp_table <- temp_table %>%
+    #Surrogate 3 (surrogate vi as weights)
+    add_row(metatable(data, data$yi_s, data$vi_s, "Surrogate 3 (vi_s)", subgroup)) %>%
+    #Surrogate 3 (mortality vi as weights)
+    add_row(metatable(data, data$yi_s, data$vi_m, "Surrogate 3 (vi_m)", subgroup))
+  
+  return(temp_table)
+}
+                  
+
+```
+
+## Average effect of screening on endpoints by cancer and test
+
+```{r table, echo=FALSE, warning=FALSE}
+
+# Mortality & Surrogate 1
+setwd("../code/Estimates")
+source("Ovarian.R")
+ovarian <- finaldata_primary_1 %>%
+  mutate(cancer="Ovarian")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Cervical.R")
+cervical <- finaldata_primary_1 %>%
+  mutate(cancer="Cervical") %>%
+  mutate(trial_acro_sm=ifelse(trial_acro_sm=="Mumbai Breast Cervix","Mumbai Cervix",trial_acro_sm))%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Liver.R")
+liver <- finaldata_primary_1 %>%
+  mutate(cancer="Liver")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Nasopharyngeal.R")
+nasopharyngeal <- finaldata_primary_1 %>%
+  mutate(cancer="Nasopharyngeal")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Oral.R")
+oral <- finaldata_primary_1 %>%
+  mutate(cancer="Oral")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Occult.R")
+occult <- finaldata_primary_1 %>%
+  mutate(cancer="Occult")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Lung.R")
+lung <- finaldata_primary_1 %>%
+  mutate(cancer="Lung")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Prostate.R")
+prostate <- finaldata_primary_1 %>%
+  mutate(cancer="Prostate")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Breast.R")
+breast <- finaldata_primary_1 %>%
+  mutate(cancer="Breast") %>%
+  mutate(trial_acro_sm=ifelse(trial_acro_sm=="Mumbai Breast Cervix","Mumbai Breast",trial_acro_sm))%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Bowel.R")
+bowel <- finaldata_primary_1 %>%
+  mutate(cancer="Bowel")%>%
+  filter(!is.na(yi_s))
+
+
+gdata::keep(
+  ovarian,
+  cervical,
+  liver,
+  nasopharyngeal,
+  oral,
+  occult,
+  lung,
+  prostate,
+  breast,
+  bowel,
+  final_table,
+  metatable,
+  effects,
+  sure = T
+)
+
+all_finaldata_primary_1 <- bind_rows(ovarian,
+                                     cervical,
+                                     liver,
+                                     nasopharyngeal,
+                                     oral,
+                                     occult,
+                                     lung,
+                                     prostate,
+                                     breast,
+                                     bowel)
+
+# Categorise trials in test subgroups
+all_finaldata_primary_1 <- all_finaldata_primary_1 %>%
+  filter(!is.na(yi_s)) %>%
+  mutate(test_subgroup=ifelse(str_detect(screening_test,"LDCT"),"LDCT", "")) %>%
+  mutate(test_subgroup=ifelse(str_detect(screening_test,"Chest X-ray"),"Chest X-ray", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse(str_detect(screening_test,"Chest x-ray"),"Chest X-ray", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse(str_detect(screening_test,"Mammography"),"Mammography", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse((!str_detect(screening_test,"Mammography")&cancer=="Breast"),"Other", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse((str_detect(screening_test,"Flexible sigmoidoscopy")| str_detect(screening_test,"Colonoscopy")) ,"Flexible sigmoidoscopy/Colonoscopy", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse((test_subgroup!="Flexible sigmoidoscopy/Colonoscopy" & cancer=="Bowel"),"FOTB", test_subgroup))
+
+
+#create empty table structure to add results 
+final_effects_table <- data.frame(
+  Endpoint=character(),
+  Subgroup=character(),
+  Effect=numeric(),
+  CI_lb=numeric(),
+  CI_ub=numeric(),
+  SE=numeric(),
+  Z=numeric()
+)
+
+# calculate average effect on mortality and surrogate 1 by cancer and by test and add the estimates in the table
+final_effects_table <- final_effects_table %>%
+  add_row(effects_1(metatable, all_finaldata_primary_1, "All")) %>%
+  #by cancer
+  add_row(effects_1(metatable, bowel, "Bowel")) %>%
+  add_row(effects_1(metatable, breast, "Breast")) %>%
+  add_row(effects_1(metatable, cervical, "Cervical")) %>%
+  add_row(effects_1(metatable, liver, "Liver")) %>%
+  add_row(effects_1(metatable, lung, "Lung")) %>%
+  add_row(effects_1(metatable, nasopharyngeal, "Nasopharyngeal")) %>%
+  add_row(effects_1(metatable, occult, "Occult")) %>%
+  add_row(effects_1(metatable, oral, "Oral")) %>%
+  add_row(effects_1(metatable, ovarian, "Ovarian")) %>%
+  add_row(effects_1(metatable, prostate, "Prostate"))%>%
+  #by test
+  add_row(effects_1(metatable, subset(all_finaldata_primary_1, test_subgroup=="Chest X-ray"), "Lung - Chest X-ray")) %>%
+  add_row(effects_1(metatable, subset(all_finaldata_primary_1, test_subgroup=="LDCT"), "Lung - LDCT")) %>%
+  add_row(effects_1(metatable, subset(all_finaldata_primary_1, test_subgroup=="Mammography"), "Breast - Mammography")) %>%
+  add_row(effects_1(metatable, subset(all_finaldata_primary_1, test_subgroup=="Other"), "Breast - Other")) %>%
+  add_row(effects_1(metatable, subset(all_finaldata_primary_1, test_subgroup=="Flexible sigmoidoscopy/Colonoscopy"), "Bowel - Flexible sigmoidoscopy/Colonoscopy")) %>%
+  add_row(effects_1(metatable, subset(all_finaldata_primary_1, test_subgroup=="FOTB"), "Bowel - FOTB")) 
+
+
+# Surrogate 3
+setwd("../code/Estimates")
+source("Ovarian.R")
+ovarian <- finaldata_primary_3 %>%
+  mutate(cancer="Ovarian")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Cervical.R")
+cervical <- finaldata_primary_3 %>%
+  mutate(cancer="Cervical") %>%
+  mutate(trial_acro_sm=ifelse(trial_acro_sm=="Mumbai Breast Cervix","Mumbai Cervix",trial_acro_sm))%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Liver.R")
+liver <- finaldata_primary_3 %>%
+  mutate(cancer="Liver")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Nasopharyngeal.R")
+nasopharyngeal <- finaldata_primary_3 %>%
+  mutate(cancer="Nasopharyngeal")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Oral.R")
+oral <- finaldata_primary_3 %>%
+  mutate(cancer="Oral")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Occult.R")
+occult <- finaldata_primary_3 %>%
+  mutate(cancer="Occult")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Lung.R")
+lung <- finaldata_primary_3 %>%
+  mutate(cancer="Lung")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Prostate.R")
+prostate <- finaldata_primary_3 %>%
+  mutate(cancer="Prostate")%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Breast.R")
+breast <- finaldata_primary_3 %>%
+  mutate(cancer="Breast") %>%
+  mutate(trial_acro_sm=ifelse(trial_acro_sm=="Mumbai Breast Cervix","Mumbai Breast",trial_acro_sm))%>%
+  filter(!is.na(yi_s))
+
+setwd("../code/Estimates")
+source("Bowel.R")
+bowel <- finaldata_primary_3 %>%
+  mutate(cancer="Bowel")%>%
+  filter(!is.na(yi_s))
+
+
+all_finaldata_primary_3 <-
+  bind_rows(ovarian,
+            cervical,
+            liver,
+            nasopharyngeal,
+            oral,
+            occult,
+            lung,
+            prostate,
+            breast,
+            bowel)
+
+# Categorise trials in test subgroups
+all_finaldata_primary_3 <- all_finaldata_primary_3 %>%
+  mutate(test_subgroup=ifelse(str_detect(screening_test,"LDCT"),"LDCT", "")) %>%
+  mutate(test_subgroup=ifelse(str_detect(screening_test,"Chest X-ray"),"Chest X-ray", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse(str_detect(screening_test,"Chest x-ray"),"Chest X-ray", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse(str_detect(screening_test,"Mammography"),"Mammography", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse((!str_detect(screening_test,"Mammography")&cancer=="Breast"),"Other", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse((str_detect(screening_test,"Flexible sigmoidoscopy")| str_detect(screening_test,"Colonoscopy")) ,"Flexible sigmoidoscopy/Colonoscopy", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse((test_subgroup!="Flexible sigmoidoscopy/Colonoscopy" & cancer=="Bowel"),"FOTB", test_subgroup)) %>%
+  filter(!is.na(yi_s))
+
+
+# calculate average effect on surrogate 3 by cancer and by test and add the estimates in the table
+final_effects_table <- final_effects_table %>%
+  add_row(effects_3(metatable, all_finaldata_primary_3, "All")) %>%
+  #by cancer
+  add_row(effects_3(metatable, bowel, "Bowel")) %>%
+  add_row(effects_3(metatable, breast, "Breast")) %>%
+  add_row(effects_3(metatable, cervical, "Cervical")) %>%
+  add_row(effects_3(metatable, liver, "Liver")) %>%
+  add_row(effects_3(metatable, lung, "Lung")) %>%
+  add_row(effects_3(metatable, nasopharyngeal, "Nasopharyngeal")) %>%
+  add_row(effects_3(metatable, occult, "Occult")) %>%
+  add_row(effects_3(metatable, oral, "Oral")) %>%
+  add_row(effects_3(metatable, ovarian, "Ovarian")) %>%
+  add_row(effects_3(metatable, prostate, "Prostate")) %>%
+  #by test
+  add_row(effects_3(metatable, subset(all_finaldata_primary_3, test_subgroup=="Chest X-ray"), "Lung - Chest X-ray")) %>%
+  add_row(effects_3(metatable, subset(all_finaldata_primary_3, test_subgroup=="LDCT"), "Lung - LDCT")) %>%
+  add_row(effects_3(metatable, subset(all_finaldata_primary_3, test_subgroup=="Mammography"), "Breast - Mammography")) %>%
+  add_row(effects_3(metatable, subset(all_finaldata_primary_3, test_subgroup=="Other"), "Breast - Other")) %>%
+  add_row(effects_3(metatable, subset(all_finaldata_primary_3, test_subgroup=="Flexible sigmoidoscopy/Colonoscopy"), "Bowel - Flexible sigmoidoscopy/Colonoscopy")) %>%
+  add_row(effects_3(metatable, subset(all_finaldata_primary_3, test_subgroup=="FOTB"), "Bowel - FOTB")) 
+
+#print table with results by cancer and test
+final_effects_table %>%
+  mutate(across(where(is.numeric), exp)) %>%
+  mutate(across(where(is.numeric), round, 2)) %>%
+  arrange(Subgroup, Endpoint)
+
+```
+
+# Analysis
+```{r analysis, echo=FALSE, warning=FALSE}
+
+## FE meta-analysis of the average effects by cancer/test
+final_effects_table_plot <- final_effects_table%>%
+  pivot_wider(names_from = Endpoint, values_from = c(Effect, CI_lb, CI_ub, Z, SE)) %>%
+  #remove overall estimates for those we have test subgroups
+  filter(Subgroup!="Lung" & Subgroup!="Bowel" & Subgroup!="Breast") %>%
+  #remove overall estimate for all cancers
+  filter(Subgroup!="All") %>%
+  #obtain SE from 95% CIs
+  mutate(sei_m = (CI_ub_Mortality-Effect_Mortality)/1.96) %>%
+  # calculate variance
+  mutate(vi_m = sei_m^2) %>%
+  # inverse variance 1/log(v) weights
+  mutate(weight_var = 1/vi_m)
+
+## Surrogate 1
+# Regression (weights: inverse mortality variance weights)
+m_reg <- lm(formula = Effect_Mortality ~ `Effect_Surrogate 1 (vi_m)`, data = final_effects_table_plot, weights = weight_var)
+m_reg_sum <- summary(m_reg)
+
+#Confidence intervals
+slope_ci <- confint(m_reg, '`Effect_Surrogate 1 (vi_m)`', level=0.95)
+intercept_ci <- confint(m_reg, '(Intercept)', level=0.95)
+
+cis <- bootstrap_1(final_effects_table_plot)
+
+# Weighted correlation
+correlation <- weights::wtd.cor(final_effects_table_plot$Effect_Mortality, final_effects_table_plot$`Effect_Surrogate 1 (vi_m)`, weight=final_effects_table_plot$weight_var)
+
+#Add results in table
+results_surrogate <- data.frame(Cancer="All",
+                                Surrogate="Surrogate 1",
+                                Analysis="Exploratory - FE meta-analysis",
+                                Intercept = as.numeric(m_reg_sum$coefficients[1]),
+                                Intercept_lb_ci = cis[1,1], 
+                                Intercept_ub_ci = cis[2,1],
+                                Slope_lb_ci = cis[1,2],
+                                Slope_ub_ci = cis[2,2],
+                                Slope = as.numeric(m_reg_sum$coefficients[2]),
+                                Correlation=correlation[1],
+                                Correlation_lb_ci = cis[1,3],
+                                Correlation_ub_ci = cis[2,3],
+                                Rsquared=m_reg_sum$r.squared,
+                                Rsquared_lb_ci = cis[1,4],
+                                Rsquared_ub_ci = cis[2,4]
+                                )
+
+##Surrogate 3
+# Regression (weights: inverse mortality variance weights) 
+m_reg <- lm(formula = Effect_Mortality ~ `Effect_Surrogate 3 (vi_m)`, data = final_effects_table_plot, weights = weight_var)
+m_reg_sum <- summary(m_reg)
+
+#Confidence intervals
+slope_ci <- confint(m_reg, '`Effect_Surrogate 3 (vi_m)`', level=0.95)
+intercept_ci <- confint(m_reg, '(Intercept)', level=0.95)
+
+# correlation
+correlation <- weights::wtd.cor(final_effects_table_plot$Effect_Mortality, final_effects_table_plot$`Effect_Surrogate 3 (vi_m)`, weight=final_effects_table_plot$weight_var)
+
+cis <- bootstrap_3(final_effects_table_plot)
+
+#Add results in table
+results_surrogate <- results_surrogate %>%
+  add_row(
+    data.frame(
+      Cancer = "All",
+      Surrogate = "Surrogate 3",
+      Analysis = "Exploratory - FE meta-analysis",
+      Intercept = as.numeric(m_reg_sum$coefficients[1]),
+      Intercept_lb_ci = cis[1,1],
+      Intercept_ub_ci = cis[2,1],
+      Slope_lb_ci = cis[1,2],
+      Slope_ub_ci = cis[2,2],
+      Slope = as.numeric(m_reg_sum$coefficients[2]),
+      Correlation = correlation[1],
+      Correlation_lb_ci = cis[1,3],
+      Correlation_ub_ci = cis[2,3],
+      Rsquared = m_reg_sum$r.squared,
+      Rsquared_lb_ci = cis[1,4],
+      Rsquared_ub_ci = cis[2,4]
+    )
+  ) 
+
+
+#print results table
+results_surrogate %>%
+  mutate(across(where(is.numeric), round, 2)) 
+
+```
+
+# Plots
+## By cancer (or test type, where available)
+```{r plots, echo=FALSE, warning=FALSE}
+
+final_effects_table_plot<- final_effects_table_plot%>%
+    mutate(Subgroup=ifelse(Subgroup=="Occult", "Multiple", Subgroup))
+
+
+#Surrogate 1 
+plot_1 <- ggplot(final_effects_table_plot, aes(y=exp(Effect_Mortality), x=exp(`Effect_Surrogate 1 (vi_m)`), weight=weight_var, colour=Subgroup)) +
+  stat_smooth(method="lm", colour="black",linewidth=0.6, fullrange=T)+
+  geom_abline(intercept=0, slope=1, linetype=2)+
+  geom_hline(yintercept = 1, linetype=3)+
+  geom_vline(xintercept = 1, linetype=3)+
+  geom_point(aes(size=weight_var)) +
+  scale_x_continuous(trans="log", limits = c(0.3,1.5), breaks=c(0.5,1,1.5, 2)) + 
+  scale_y_continuous(trans="log", limits = c(0.3,1.5), breaks=c(0.5,1,1.5, 2)) +
+  labs(x="Average Effect on Surrogate 1", y="Average Effect on Mortality", colour="Cancer type")+
+  theme_bw() +
+  theme(aspect.ratio = 1)+
+  guides(size="none")
+
+
+#Surrogate 3 
+plot_3 <- ggplot(final_effects_table_plot, aes(y=exp(Effect_Mortality), x=exp(`Effect_Surrogate 3 (vi_m)`), weight=weight_var, colour=Subgroup)) +
+  stat_smooth(method="lm", colour="black",linewidth=0.6, fullrange=T)+
+  geom_abline(intercept=0, slope=1, linetype=2)+
+  geom_hline(yintercept = 1, linetype=3)+
+  geom_vline(xintercept = 1, linetype=3)+
+  geom_point(aes(size=weight_var)) +
+  scale_x_continuous(trans="log", limits = c(0.3,1.5), breaks=c(0.5,1,1.5, 2)) + 
+  scale_y_continuous(trans="log", limits = c(0.3,1.5), breaks=c(0.5,1,1.5, 2)) +
+  labs(x="Average Effect on Surrogate 3", y="Average Effect on Mortality", colour="Cancer type")+
+  theme_bw() +
+  theme(aspect.ratio = 1)+
+  guides(size="none")
+
+
+ggarrange(plot_1 +
+            guides(colour="none"),
+          plot_3 +
+            theme(axis.text.y = element_blank(),
+                  axis.ticks.y = element_blank(),
+                  axis.title.y = element_blank()),
+          nrow=1)
+```
+## By test type
+```{r testtype, echo=FALSE, warning=FALSE}
+
+final_effects_table_plot_TEST <- final_effects_table_plot %>%
+  filter(
+    Subgroup == "Lung - Chest X-ray" |
+      Subgroup == "Lung - LDCT" |
+      Subgroup == "Breast - Mammography" |
+      Subgroup == "Breast - Other" |
+      Subgroup == "Bowel - FOTB" |
+      Subgroup == "Bowel - Flexible sigmoidoscopy/Colonoscopy"
+  ) 
+
+  
+#Surrogate 1 
+plot_1 <- ggplot(final_effects_table_plot_TEST, aes(y=exp(Effect_Mortality), x=exp(`Effect_Surrogate 1 (vi_m)`), weight=weight_var, colour=Subgroup)) +
+  stat_smooth(method="lm", colour="black",linewidth=0.6, fullrange=T)+
+  geom_abline(intercept=0, slope=1, linetype=2)+
+  geom_hline(yintercept = 1, linetype=3)+
+  geom_vline(xintercept = 1, linetype=3)+
+  geom_point(aes(size=weight_var)) +
+  scale_x_continuous(trans="log", limits = c(0.3,1.5), breaks=c(0.5,1,1.5, 2)) + 
+  scale_y_continuous(trans="log", limits = c(0.3,1.5), breaks=c(0.5,1,1.5, 2)) +
+  labs(x="Average Effect on Surrogate 1", y="Average Effect on Mortality", colour="Test type")+
+  theme_bw() +
+  theme(aspect.ratio = 1)+
+  guides(size="none")
+
+
+#Surrogate 3 
+plot_3 <- ggplot(final_effects_table_plot_TEST, aes(y=exp(Effect_Mortality), x=exp(`Effect_Surrogate 3 (vi_m)`), weight=weight_var, colour=Subgroup)) +
+  stat_smooth(method="lm", colour="black",linewidth=0.6, fullrange=T)+
+  geom_abline(intercept=0, slope=1, linetype=2)+
+  geom_hline(yintercept = 1, linetype=3)+
+  geom_vline(xintercept = 1, linetype=3)+
+  geom_point(aes(size=weight_var)) +
+  scale_x_continuous(trans="log", limits = c(0.3,1.5), breaks=c(0.5,1,1.5, 2)) + 
+  scale_y_continuous(trans="log", limits = c(0.3,1.5), breaks=c(0.5,1,1.5, 2)) +
+  labs(x="Average Effect on Surrogate 3", y="Average Effect on Mortality", colour="Test type")+
+  theme_bw() +
+  theme(aspect.ratio = 1)+
+  guides(size="none")
+
+
+ggarrange(plot_1 +
+            guides(colour="none"),
+          plot_3 +
+            theme(axis.text.y = element_blank(),
+                  axis.ticks.y = element_blank(),
+                  axis.title.y = element_blank()),
+          nrow=1)
+
+```
+
+# Z plot
+```{r zplot, echo=FALSE, warning=FALSE}
+
+ad_zplot_dta <- final_effects_table%>%
+  pivot_wider(names_from = Endpoint, values_from = c(Effect, CI_lb, CI_ub, Z, SE)) %>%
+  #remove overall estimates for those we have test subgroups
+  filter(Subgroup!="Lung" & Subgroup!="Bowel" & Subgroup!="Breast") %>%
+  #remove overall estimate for all cancers
+  filter(Subgroup!="All") %>%
+  #obtain SE from 95% CIs
+  mutate(sei_m = (CI_ub_Mortality-Effect_Mortality)/1.96) %>%
+  # calculate variance
+  mutate(vi_m = sei_m^2) %>%
+  # inverse variance 1/log(v) weights
+  mutate(weight_var = 1/vi_m)
+
+ad_zplot_dta$x = -as.double(ad_zplot_dta$"Z_Surrogate 1 (vi_m)")
+ad_zplot_dta$y = -as.double(ad_zplot_dta$"Z_Mortality")
+
+ad_zplot_dta$Subgroup[ad_zplot_dta$Subgroup=="Bowel - Flexible sigmoidoscopy/Colonoscopy"]<-"Bowel - FS/C"
+ad_zplot_dta$Subgroup[ad_zplot_dta$Subgroup=="Bowel - FOTB"]<-"Bowel - FOBT"
+
+
+myzplot<-ggplot(ad_zplot_dta, aes(x = x, y = y, label=Subgroup))+
+    geom_point(aes(size = 100, colour=Subgroup), shape=16) +
+  geom_abline(intercept=0, slope=1, linetype=2)+
+  labs(x="Z late stage incidence (meta analysis)", y="Z Mortality (meta analysis)")+
+  theme_bw() +
+  theme(plot.caption=element_text(hjust=0),  aspect.ratio = 1,legend.position = "none") +
+    guides(size="none")+
+    xlim(0,7) +
+    ylim(0,7) +
+    geom_text(hjust=-0.07, vjust=0.5)
+
+ggsave("ad-zplot.pdf", myzplot, scale=1)
+
+myzplot
+
+```
+# Forecast plot
+```{r forecastplot, echo=FALSE, warning=FALSE}
+
+mydta<- all_finaldata_primary_1 %>%
+    mutate(lyi_s = yi_s) %>%
+    mutate(lyi_m = yi_m) %>%
+    mutate(lci.lb_s = ci.lb_s) %>%
+    mutate(lci.ub_s = ci.ub_s) %>%
+    mutate(se.s =  sei_s) %>%
+    mutate(F = pnorm(lyi_m, lyi_s, se.s)) %>%
+    mutate(yi_s = exp(yi_s)) %>%
+    mutate(yi_m = exp(yi_m)) %>%
+    mutate(ci.lb_s = exp(ci.lb_s)) %>%
+    mutate(ci.ub_s = exp(ci.ub_s))
+
+mydta2<-mydta %>%
+    arrange(F) %>%
+    mutate(F2=round(F,2)) %>%
+    select(c("cancer", "trial_acro_sm","ci.lb_s", "yi_m", "ci.ub_s", "F2"))
+
+myn<-nrow(mydta)
+
+mydtaplot<-mydta
+mydtaplot<-mydtaplot[order(mydtaplot$F),]
+mylim<-1
+mylim2<-0.2
+myoffset<-0.1
+
+mycol<-((mydtaplot$lci.lb_s > mydtaplot$lyi_m)*2 + (mydtaplot$lci.ub_s < mydtaplot$lyi_m)*1)
+
+myarrow<- mydtaplot$lci.ub_s >= mylim ++ mydtaplot$lyi_s
+
+
+mydtaplot$lci.ub_s[myarrow]<-  mylim + mydtaplot$lyi_s[myarrow]
+mydtaplot$lci.lb_s[myarrow]<- -mylim + mydtaplot$lyi_s[myarrow]
+
+
+
+myscale<-2
+##png("PredictTrial_all2.png", width=480*myscale^2, height=480*myscale)
+##pdf("PredictTrial_all2.pdf", width=480*myscale^2, height=480*myscale)                                                                         
+##pdf("PredictTrial_all.pdf", width=12*1.5, height=8*1.5)
+postscript(file="PredictTrial_all.eps",horiz=TRUE,onefile=FALSE,width=12*myscale, height=8*myscale, pointsize=8)
+##           width=8.5,height=11,paper=letter) 
+##myscale<-1.75
+
+#png("PredictTrialAll.png", width=480*myscale^2, height=480*myscale)
+
+par(mfrow=c(1,2))
+plot(c(0.25,6),c(0.25,6), log="xy", lty=3, xlab="Late-stage incidence RR \n [95%CI]", ylab="Mortality RR [Cancer-specific]", type="l", ylim=c(0.2,2), xlim=c(1/4,4),lwd=1.5, bty="n", main="(a)")
+
+sapply(1:myn, function(idx) lines(c(mydtaplot$ci.lb_s[idx],mydtaplot$ci.ub_s[idx]), rep(mydtaplot$yi_m[idx],2), col=mycol[idx]+1, lwd=2))
+lines(c(1,1),c(0.1,10),lty=2, col="grey", lwd=2)
+lines(c(0.1,10),c(1,1),lty=4, col="grey", lwd=1)
+points(mydtaplot$yi_m, mydtaplot$yi_m,lwd=3, cex=3, pch=20, col=mycol+1)
+
+
+legend("bottomright", legend=c("Late-stage incidence RR 95%CI", "Mortality RR", "Late-stage incidence RR=1","y=x"), lty=c(1,NA,2,3), pch=c(NA,20,NA,NA), title="Key:", pt.cex=c(3,3,33), col=c(1,1,"grey",1))
+
+
+plot(c(-mylim,mylim),c(1,myn +1), lty=2, xlab="Mortality - Late-stage incidence, log RR", ylab="Trial", pch="", bty="n", yaxt="n", xlim=c(-mylim-myoffset,mylim), main="(b)")
+
+
+sapply(1:myn, function(idx) lines(c(mydtaplot$lci.lb_s[idx],mydtaplot$lci.ub_s[idx])-mydtaplot$lyi_s[idx], c(idx,idx), col=mycol[idx]+1, lwd=2))
+
+points( mydtaplot$lyi_m-mydtaplot$lyi_s,1:myn, lwd=3, cex=3, pch=20, col=mycol+1)
+
+myoff2<-0.5
+sapply(1:myn, function(idx) text(-mylim-myoffset, idx+myoff2,mydtaplot[idx,1], pos=4))
+
+lines(c(0,0),c(0,myn+1),lty=3, lwd=1.5)
+
+points( -mydtaplot$lyi_s,1:myn, lwd=3, cex=1.5, pch=5, col=c("grey",2,3)[mycol+1])
+
+sapply((1:myn)[myarrow], function(idx) arrows(-mylim, idx, mylim, idx, code=3, length=0.1))
+
+legend("bottomright", legend=c("Late-stage incidence 95%CI", "Mortality", "RR=1"), lty=c(1,NA,NA), pch=c(NA,20,5), title="Key:", pt.cex=c(1,3,1.5), col=c(1,1,"grey"), bg="white")
+dev.off()
+
+
+library("DescTools")
+
+plot(cumsum(sort(mydta$F)))
+
+
+pdf("PredictionCalibration.pdf")
+plot(sort(mydta$F), seq(0,1,by=1/60), type="s", xlab="F (based on forecast)", ylab="ECDF")
+grid()
+
+lines(c(0.95,1),c(0.975,0.975), lty=2, lwd=2)
+lines(c(0,0.05),c(0.025,0.025), lty=2, lwd=2)
+lines(c(0.975,0.975),c(0.95,1), lty=2, lwd=2)
+lines(c(0.025,0.025),c(0,0.05), lty=2, lwd=2)
+
+lines(c(1-0.25,1),c(1-0.25/2,1-0.25/2), lty=3,lwd=2)
+lines(c(0,0.25),c(0.25/2,0.25/2), lty=3,lwd=2)
+lines(c(1-0.25/2,1-0.25/2),c(1-0.25,1), lty=3,lwd=2)
+lines(c(0.25/2,0.25/2),c(0,0.25), lty=3,lwd=2)
+
+lines(c(0,1),c(0,1),col=2)
+dev.off()
+
+AndersonDarlingTest(mydta$F, null = "punif")
+
+## only true prediction tests
+includeme<-c("UKLS",
+             "LUSI",
+             "SCORE",
+             "PLCO (Prostate)",
+         #    "Gothenburg Breast",
+         #    "UK Age",
+             "PLCO (Lung)",
+             "HIP",
+             "UK CAP",
+             "Stockholm Breast",
+             "NORCCAP",
+             "ITALUNG",
+             "Norrkoping",
+             "Finnish RHS CRC",
+     #        "UK Pilot Ovarian",
+             "Russia WHO Breast",
+             "Czech study",
+        #     "Lung Screening Study (LSS)",
+             "Telemark Polyp I" )
+
+mydtapred<-mydta %>%
+    filter(trial_acro_sm %in% includeme)
+
+myn<-nrow(mydtapred)
+mydtaplot<-mydtapred
+mydtaplot<-mydtaplot[order(mydtaplot$F),]
+mylim<-1
+mylim2<-0.2
+myoffset<-0.1
+
+mydtaplot$lci.ub_s[mydtaplot$trial_acro_sm=="Telemark Polyp I"]<-mylim+mydtaplot$lyi_s[mydtaplot$trial_acro_sm=="Telemark Polyp I"]
+mydtaplot$lci.lb_s[mydtaplot$trial_acro_sm=="Telemark Polyp I"]<--mylim+mydtaplot$lyi_s[mydtaplot$trial_acro_sm=="Telemark Polyp I"]
+
+mydtaplot$ci.ub_s[mydtaplot$trial_acro_sm=="Telemark Polyp I"]<-1/mylim2
+mydtaplot$ci.lb_s[mydtaplot$trial_acro_sm=="Telemark Polyp I"]<-mylim2
+
+myscale<-1.75
+
+png("PredictTrial.png", width=480*myscale^2, height=480*myscale)
+
+par(mfrow=c(1,2))
+plot(c(1/6,6),c(1/6,6), log="xy", lty=3, xlab="Late-stage incidence RR \n [95%CI]", ylab="Mortality RR [Cancer-specific]", type="l", ylim=c(1/6,2), lwd=1.5, bty="n", main="(a)")
+
+mycol<-mydtaplot$trial_acro_sm=="PLCO (Prostate)"
+
+sapply(1:15, function(idx) lines(c(mydtaplot$ci.lb_s[idx],mydtaplot$ci.ub_s[idx]), rep(mydtaplot$yi_m[idx],2), col=mycol[idx]+1, lwd=2))
+
+lines(c(1,1),c(0.1,10),lty=2, col="grey", lwd=2)
+
+lines(c(0.1,10),c(1,1),lty=4, col="grey", lwd=1)
+
+points(mydtaplot$yi_m, mydtaplot$yi_m,lwd=3, cex=3, pch=20, col=mycol+1)
+
+arrows(mylim2,mydtaplot$yi_m[mydtaplot$trial_acro_sm=="Telemark Polyp I"],1/mylim2,mydtaplot$yi_m[mydtaplot$trial_acro_sm=="Telemark Polyp I"], code=3, length=0.1)
+
+legend("topleft", legend=c("Late-stage incidence RR 95%CI", "Mortality RR", "Late-stage incidence RR=1","y=x"), lty=c(1,NA,2,3), pch=c(NA,20,NA,NA), title="Key:", pt.cex=c(3,3,33), col=c(1,1,"grey",1))
+
+
+plot(c(-mylim,mylim),c(1,16), lty=2, xlab="Mortality - Late-stage incidence, log RR", ylab="Trial", pch="", bty="n", yaxt="n", xlim=c(-mylim-myoffset,mylim), main="(b)")
+
+mycol<-mydtaplot$trial_acro_sm=="PLCO (Prostate)"
+
+sapply(1:15, function(idx) lines(c(mydtaplot$lci.lb_s[idx],mydtaplot$lci.ub_s[idx])-mydtaplot$lyi_s[idx], c(idx,idx), col=mycol[idx]+1, lwd=2))
+
+points( mydtaplot$lyi_m-mydtaplot$lyi_s,1:15, lwd=3, cex=3, pch=20, col=mycol+1)
+
+arrows(-mylim,7,mylim,7, code=3, length=0.1)
+
+myoff2<-0.5
+
+sapply(1:15, function(idx) text(-mylim-myoffset, idx+myoff2,mydtaplot$trial_acro_sm[idx], pos=4))
+
+lines(c(0,0),c(0,20),lty=3, lwd=1.5)
+
+points( -mydtaplot$lyi_s,1:15, lwd=3, cex=1.5, pch=5, col=c("grey",2)[mycol+1])
+
+legend("topright", legend=c("Late-stage incidence 95%CI", "Mortality", "RR=1"), lty=c(1,NA,NA), pch=c(NA,20,5), title="Key:", pt.cex=c(1,3,1.5), col=c(1,1,"grey"))
+
+dev.off()
+
+AndersonDarlingTest(mydtapred$F, null = "punif")
+
+
+
+
+```
+# Leave-one-out cross validation correlation
+```{r loo, echo=FALSE, warning=FALSE}
+
+myxc<-c()
+
+myn<-nrow(all_finaldata_primary_1)
+
+for(idx in 1:myn){
+    myxc[idx]<- weights::wtd.cor(all_finaldata_primary_1$yi_m[-idx],
+                                 all_finaldata_primary_1$yi_s[-idx],
+                                 (1/all_finaldata_primary_1$vi_m)[-idx])
+}
+
+weights::wtd.cor(all_finaldata_primary_1$yi_m,
+                 all_finaldata_primary_1$yi_s,
+                 1/all_finaldata_primary_1$vi_m)
+
+
+##exclude finnish cervix and ukffst - review comment
+58 ##ukfsst
+5 ## finnish rhs cervix
+myex<-c(5,58)
+myxc[myex]
+idx<-myex
+weights::wtd.cor(all_finaldata_primary_1$yi_m[-idx],
+                                 all_finaldata_primary_1$yi_s[-idx],
+                                 (1/all_finaldata_primary_1$vi_m)[-idx])
+weights::wtd.cor(all_finaldata_primary_1$yi_m,
+                                 all_finaldata_primary_1$yi_s,
+                                 (1/all_finaldata_primary_1$vi_m))
+
+cor.test(all_finaldata_primary_1$yi_m,all_finaldata_primary_1$yi_s)
+
+extradta <-all_finaldata_primary_1 %>%
+    select(trial_acro_sm, screening_test, vi_m) %>%
+##           outcome_description_m, outcome_description_s,vi_m) %>%
+    mutate(inv=1/vi_m) %>%
+    mutate(wt = round(inv/sum(inv)*100,2))
+
+write_csv(extradta, "250404-weights.csv")
+
+boxplot(myxc)
+summary(myxc)
+
+min(myxc)
+idcheck<-which(myxc==min(myxc))
+c(all_finaldata_primary_1[idcheck,])
+
+max(myxc)
+idcheck<-which(myxc==max(myxc))
+c(all_finaldata_primary_1[idcheck,])
+
+##qidong not included
+myw<-weights::wtd.cor(all_finaldata_primary_1$yi_m[-idx],
+                                 all_finaldata_primary_1$yi_s[-idx],
+                                 (1/all_finaldata_primary_1$vi_m)[-idx])
+
+noqidong<-all_finaldata_primary_1[-11,]
+
+myw<-weights::wtd.cor(all_finaldata_primary_1$yi_m[-idx],
+                                 all_finaldata_primary_1$yi_s[-idx],
+                                 (1/all_finaldata_primary_1$vi_m)[-idx])
+
+mybsdta<-data.frame(
+    trial=all_finaldata_primary_1[-idx,1],
+    yi_m=all_finaldata_primary_1$yi_m[-idx],
+    yi_s=all_finaldata_primary_1$yi_s[-idx],
+    vi_m= all_finaldata_primary_1$vi_m[-idx])
+
+mybsfn<-function(sampidx,thisidx){
+
+    includesamp<-sampidx[thisidx]
+
+    bootdta<-mybsdta[mytrial%in%includesamp,]
+    
+    thisout<-weights::wtd.cor(bootdta$yi_m,
+                     bootdta$yi_s,
+                     (1/bootdta$vi_m))
+    thisout
+}
+
+mytrial<-(as.integer(factor(mybsdta[,1])))
+mytrial_samp<-sort(unique(mytrial))
+
+myboot<-boot(mytrial_samp, mybsfn, R=999)
+
+
+```
+# Cross hatch plot meta and z-plot
+
+```{r crosshatch, echo=FALSE, warning=FALSE}
+myaxlim<-c(0.2, 1.25)
+myaxlim<-c(0.4, 1.1)
+mydiff<-0.001
+# ad_zplot_dta <- ad_zplot_dta %>%
+#     mutate(logLCIs = pmax(log(myaxlim[1]+mydiff), `CI_lb_Surrogate 1 (vi_m)`)) %>%
+#     mutate(logUCIs = pmin(log(myaxlim[2]-mydiff), `CI_ub_Surrogate 1 (vi_m)`)) %>%
+#     mutate(logLCI = pmax(log(myaxlim[1]+mydiff), CI_lb_Mortality)) %>%
+#     mutate(logUCI = pmin(log(myaxlim[2]-mydiff), CI_ub_Mortality)) 
+
+#estimate+/-SE
+ad_zplot_dta <- ad_zplot_dta %>%
+    mutate(logLCIs = pmax(log(myaxlim[1]+mydiff), (`Effect_Surrogate 1 (vi_m)` - `SE_Surrogate 1 (vi_m)`))) %>%
+    mutate(logUCIs = pmin(log(myaxlim[2]-mydiff), (`Effect_Surrogate 1 (vi_m)` + `SE_Surrogate 1 (vi_m)`))) %>%
+    mutate(logLCI = pmax(log(myaxlim[1]+mydiff), (Effect_Mortality - SE_Mortality))) %>%
+    mutate(logUCI = pmin(log(myaxlim[2]-mydiff), (Effect_Mortality + SE_Mortality))) 
+
+
+ad_zplot_dta<- ad_zplot_dta %>%
+    arrange(weight_var)
+
+mypos<-ad_zplot_dta %>% filter(Subgroup=="Prostate") %>% select(c("Effect_Surrogate 1 (vi_m)", "Effect_Mortality")) %>%unlist() %>%c() %>% exp()
+
+plot_cancer <- ggplot(ad_zplot_dta, aes(x = exp(`Effect_Surrogate 1 (vi_m)`), y = exp(Effect_Mortality), label=Subgroup, weight=weight_var)) +
+#    geom_point(aes(size = weight_var, col=Subgroup), shape = 16, alpha=0.5) +
+    geom_abline(intercept=0, slope=1, linetype=2)+
+    geom_hline(yintercept=1, linetype=3)+
+    geom_vline(xintercept=1, linetype=3)+
+    labs(x="RR Late Stage Incidence", y="RR Cancer Mortality")+
+    theme_bw()+
+    theme(legend.position = "none", plot.caption=element_text(hjust=0, size=20),axis.text=element_text(size=20),axis.title=element_text(size=20,face="bold")) +
+    scale_x_continuous(trans="log", limits = myaxlim, breaks=c(0.5,0.8,0.9,1))+ #, limits=c(-0.5,3))+                                         
+    scale_y_continuous(trans="log", limits = myaxlim, breaks=c(0.5,0.8,0.9,1)) +
+    geom_pointrange(aes(ymin=exp(logLCI), ymax=exp(logUCI)),alpha=1, fatten=10)+
+    geom_pointrange(aes(xmin=exp(logLCIs), xmax=exp(logUCIs)),alpha=1, fatten=10)+
+#    scale_color_viridis(discrete=TRUE)+
+#    geom_point(aes(size = weight_var, col=Subgroup), shape = 16, alpha=0.5) +
+#    scale_size(range = c(1, 40), name="Precision") +
+    geom_text( hjust=0, nudge_y=0.01, check_overlap=TRUE)+
+        annotate(geom="text", x=mypos[1], y=mypos[2]+0.01, label="Prostate", hjust=1) 
+
+plot_cancer 
+
+
+
+
+###############
+ad_zplot_dta <- ad_zplot_dta %>%
+  mutate(Subgroup=ifelse(Subgroup=="Occult", "Multiple", Subgroup))
+
+plot_cancer2 <- ggplot(ad_zplot_dta, aes(x = 1-exp(`Effect_Surrogate 1 (vi_m)`), y = 1-exp(Effect_Mortality), label=Subgroup, weight=weight_var)) +
+    geom_point(aes(size = weight_var, col=Subgroup), shape = 16, alpha=0.5) +
+    geom_abline(intercept=0, slope=1, linetype=2)+
+    geom_hline(yintercept=0, linetype=3)+
+    geom_vline(xintercept=0, linetype=3)+
+    labs(x="1 - RR Late Stage Incidence", y="1 - RR Cancer Mortality")+
+    theme_bw()+
+    theme(legend.position = "none", plot.caption=element_text(hjust=0, size=20),axis.text=element_text(size=20),axis.title=element_text(size=20#,face="bold"
+                                                                                                                                        )) +
+    scale_x_continuous(limits = rev(1-myaxlim), breaks=1-c(0.5,0.8,0.9,1))+ #, limits=c(-0.5,3))+                                         
+    scale_y_continuous(limits = rev(1-myaxlim), breaks=1-c(0.5,0.8,0.9,1)) +
+    geom_pointrange(aes(ymin=1-exp(logUCI), ymax=1-exp(logLCI)),alpha=1, fatten=10)+
+    geom_pointrange(aes(xmin=1-exp(logUCIs), xmax=1-exp(logLCIs)),alpha=1, fatten=10)+
+#    scale_color_viridis(discrete=TRUE)+
+#    geom_point(aes(size = weight_var, col=Subgroup), shape = 16, alpha=0.5) +
+#    scale_size(range = c(1, 40), name="Precision") +
+    geom_text( hjust=0, nudge_y=0.01, check_overlap=TRUE, size=6)+
+        annotate(geom="text", x=1-mypos[1], y=1-mypos[2]-0.01, label="Prostate", hjust=-0.2, size=6 ) +
+    theme(aspect.ratio = 1)
+
+
+
+
+myzplot<-ggplot(ad_zplot_dta, aes(x = x, y = y, label=Subgroup))+
+  #geom_rect(aes(xmin=0, xmax=1.96, ymin=0, ymax=1.96), alpha=0.4)+
+    geom_point(aes(size = weight_var, colour=Subgroup), shape=16) +
+  geom_abline(intercept=0, slope=1, linetype=2)+
+  labs(x="Z late stage incidence (meta analysis)", y="Z Mortality (meta analysis)")+
+  theme_bw() +
+    theme(plot.caption=element_text(hjust=0),  aspect.ratio = 1,legend.position = "none",axis.text=element_text(size=20),axis.title=element_text(size=20#,face="bold"
+                                                                                                                                                 )) +
+    scale_size(range = c(5, 50), name="Precision") +
+    guides(size="none")+
+    xlim(0,7) +
+    ylim(0,7) +
+    geom_text(hjust=-0.1, vjust=0, size=6) +
+  annotate("segment", x=0, xend=1.96, y=1.96, yend=1.96, linetype=5) +
+    annotate("segment", y=0, yend=1.96, x=1.96, xend=1.96, linetype=5) +
+    #annotate("segment", x=0, xend=1.96, y=0, yend=0, linetype=5) +
+  #annotate("segment", x=0, xend=0, y=0, yend=1.96, linetype=5) +
+    theme(aspect.ratio = 1)
+
+
+figure <- ggarrange(plot_cancer2, myzplot, 
+                    labels = c("A", "B"),
+                    ncol = 2, nrow = 1,
+                    label.args = list(gp = grid::gpar(font = 28, cex =4)))
+
+ggsave("ad-figsup.pdf", figure, scale=0.6)
+ggsave("ad-figsup.png", figure, scale=0.6)
+
+ggsave("ad-figsup.pdf", figure, scale=1.0)
+ggsave("ad-figsup.png", figure, scale=1.0)
+
+
+
+figure <- ggarrange(plot_cancer2, myzplot, 
+                    labels = c("(e)", "(f)"),
+                    ncol = 2, nrow = 1,
+                    label.args = list(gp = grid::gpar(font = 28, cex =4)))
+
+ggsave("ad-figsup2.pdf", figure, scale=0.6)
+ggsave("ad-figsup2.png", figure, scale=0.6)
+
+
+
+```

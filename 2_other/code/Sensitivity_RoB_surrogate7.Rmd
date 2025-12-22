@@ -1,0 +1,367 @@
+---
+title: "SUMS Sensitivity Analysis - RoB - Surrogate 7"
+output: html_document
+date: "2024-05-08"
+---
+
+This analysis excludes trials that were assessed as having 'High risk' of bias.
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+
+#Load packages
+library(gdata)
+library(flextable)
+library(readxl)
+library(tidyverse)
+
+
+#Load bootstrap function
+setwd("../code/Bootstrap")
+source("bootstrap_functions.R")
+
+#load RoB data
+setwd("../../data")
+RoB <- read_excel("SUMS_RoB_Master_Ratings_surrogates 5-7.xlsx", sheet="Master_RoB2") 
+
+RoB <- RoB %>%
+  select("Trial and assessor info", "Overall rating") %>%
+  rename_at('Trial and assessor info', ~'trial_acro_sm') %>%
+  rename_at('Overall rating', ~'RoB_overall_rating') %>%
+  #correct typos for consistency with main 
+  mutate(trial_acro_sm=ifelse(trial_acro_sm=="UK pilot Ovarian", "UK Pilot Ovarian", trial_acro_sm))%>%
+  mutate(trial_acro_sm=ifelse(trial_acro_sm=="PLCO", "PLCO (CRC)", trial_acro_sm))
+
+
+#function to prepare data for analysis
+prep_data <- function (finaldata_primary) {
+  
+  finaldata_primary <- finaldata_primary %>%
+  #exclude trials with no unscreened control arm
+  filter(comparator_other_screening=="Not applicable") %>%
+  # calculate weights (inverse variance 1/log(v))
+  mutate(weight_var = 1/vi_m) %>%
+  #only keep trials with available surrogate estimate
+  filter(!is.na(yi_s)) %>%
+  #count trials in analysis
+  mutate(N_trials=n_distinct(trial_acro_sm))
+  
+  return(finaldata_primary)
+}
+
+
+#Create results table for surrogate 1
+results_surrogate_7 <- data.frame(Cancer=character(),
+                                  Surrogate=character(),
+                                  Analysis=character(),
+                                  Ntrials=numeric(),
+                                  Intercept=numeric(),
+                                  Intercept_lb_ci=numeric(),
+                                  Intercept_ub_ci=numeric(),
+                                  Slope=numeric(),
+                                  Slope_lb_ci=numeric(),
+                                  Slope_ub_ci=numeric(),
+                                  Correlation=numeric(),
+                                  Correlation_lb_ci=numeric(),
+                                  Correlation_ub_ci=numeric(),
+                                  Rsquared=numeric(),
+                                  Rsquared_lb_ci=numeric(),
+                                  Rsquared_ub_ci=numeric()
+                                  )
+
+#function to print cancer-specific results
+print_results <- function(results_surrogate_7, cancer) {
+  results_surrogate_7 %>%
+    filter(Cancer == cancer) %>%
+    mutate(Slope_lb_ci = ifelse(Slope_lb_ci == "-99999", "-Inf", Slope_lb_ci)) %>%
+    mutate(Slope_ub_ci = ifelse(Slope_ub_ci == "99999", "Inf", Slope_ub_ci)) %>%
+    flextable() %>%
+    set_header_labels(
+      Ntrials = "N trials",
+      Intercept_lb_ci = "Intercept 95% CI; lower",
+      Intercept_ub_ci = "Intercept 95% CI; upper",
+      Slope_lb_ci = "Slope 95% CI; lower",
+      Slope_ub_ci = "Slope 95% CI; upper",
+      Correlation_lb_ci = "Correlation 95% CI; lower",
+      Correlation_ub_ci = "Correlation 95% CI; upper",
+      Rsquared = "R-squared",
+      Rsquared_lb_ci = "R-squared 95% CI; lower",
+      Rsquared_ub_ci = "R-squared 95% CI; upper"
+    ) %>%
+    autofit()
+}
+
+#function for cancer-specific plots
+plot_cancer <- function(finaldata_primary_7, cancer){
+    
+  plot_cancer <- ggplot(finaldata_primary_7, aes(x = yi_s, y = exp(yi_m), label=trial_acro_sm, weight=weight_var)) +
+    stat_smooth(method="lm", colour=NA, fullrange=T)+
+    geom_point(aes(size = weight_var, color=RoB_overall_rating), shape = 16) +
+    geom_abline(intercept = results_surrogate_7$Intercept[results_surrogate_7$Cancer==cancer], slope = results_surrogate_7$Slope[results_surrogate_7$Cancer==cancer]) +
+    #geom_abline(intercept=0, slope=1, linetype=2)+
+    geom_hline(yintercept = 1, linetype=3)+
+    #geom_vline(xintercept = 1, linetype=3)+
+    labs(x="Diagnostic yield of screening (%)", y="RR Mortality")+
+    geom_text(hjust=-0.05, vjust=-0.5)+
+    theme_bw() +
+    scale_color_manual(values = c("Low risk"="green4",
+                                  "Unclear risk"="orange")) +
+    theme(legend.position = "none",plot.caption=element_text(hjust=0), aspect.ratio = 1)
+
+  return(plot_cancer)
+}
+
+
+```
+
+# Primary analysis
+
+## Ovarian 
+
+```{r ovarian, echo=FALSE, warning=FALSE}
+
+setwd("../code/Estimates")
+source("Ovarian.R")
+
+gdata::keep(
+  finaldata_primary_7,
+  results_surrogate_7,
+  analysis,
+  prep_data,
+  print_results,
+  plot_cancer,
+  bootstrap_trial,
+  RoB,
+  sure = T
+)
+
+#exclude trials with 'High Risk' of bias
+finaldata_primary_7 <- left_join(finaldata_primary_7, RoB, by="trial_acro_sm") %>%
+  filter(RoB_overall_rating!="High risk")
+
+
+finaldata_primary_7 <- prep_data(finaldata_primary_7)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_7 <- results_surrogate_7 %>%
+  add_row(analysis(finaldata_primary_7, "Ovarian", "7. Diagnostic yield of screening", "Primary", bootstrap_trial))
+
+# print results table for cancer
+print_results(results_surrogate_7, "Ovarian")
+  
+# bubble plot
+plot <- plot_cancer(finaldata_primary_7,"Ovarian") 
+
+plot +
+  scale_y_continuous(trans="log", limits = c(0.1,6), breaks=c(0.5,1,1.5, 2, 3,5))+
+  scale_x_continuous(limits=c(0,0.0075))
+  
+
+```
+
+## Occult
+
+```{r occult, echo=FALSE, warning=FALSE}
+
+setwd("../code/Estimates")
+source("Occult.R")
+
+gdata::keep(
+  finaldata_primary_7,
+  results_surrogate_7,
+  analysis,
+  prep_data,
+  print_results,
+  plot_cancer,
+  bootstrap_trial,
+    RoB,
+  sure = T
+)
+
+#exclude trials with 'High Risk' of bias
+finaldata_primary_7 <- left_join(finaldata_primary_7, RoB, by="trial_acro_sm") %>%
+  filter(RoB_overall_rating!="High risk")
+
+finaldata_primary_7 <- prep_data(finaldata_primary_7)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_7 <- results_surrogate_7 %>%
+  add_row(analysis(finaldata_primary_7, "Occult cancer", "7. Diagnostic yield of screening", "Primary", bootstrap_trial))
+
+# print results table for cancer
+print_results(results_surrogate_7, "Occult cancer")
+  
+# bubble plot
+plot <- plot_cancer(finaldata_primary_7,"Occult cancer")
+
+plot +
+  scale_y_continuous(trans="log", limits = c(0.1,6), breaks=c(0.5,1,1.5, 2, 3,5))+
+  scale_x_continuous(limits=c(0,0.15))
+```
+
+## Lung
+
+```{r lung, echo=FALSE, warning=FALSE}
+
+setwd("../code/Estimates")
+source("Lung.R")
+
+gdata::keep(
+  finaldata_primary_7,
+  results_surrogate_7,
+  analysis,
+  prep_data,
+  print_results,
+  plot_cancer,
+  bootstrap_trial,
+    RoB,
+  sure = T
+)
+
+#exclude trials with 'High Risk' of bias
+finaldata_primary_7 <- left_join(finaldata_primary_7, RoB, by="trial_acro_sm") %>%
+  filter(RoB_overall_rating!="High risk")
+
+finaldata_primary_7 <- prep_data(finaldata_primary_7)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_7 <- results_surrogate_7 %>%
+  add_row(analysis(finaldata_primary_7, "Lung", "7. Diagnostic yield of screening", "Primary", bootstrap_trial))
+
+# print results table for cancer
+print_results(results_surrogate_7, "Lung")
+  
+# bubble plot
+plot <- plot_cancer(finaldata_primary_7,"Lung")
+
+plot +
+  scale_y_continuous(trans="log", limits = c(0.1,6), breaks=c(0.5,1,1.5, 2, 3,5))+
+  scale_x_continuous(limits=c(0,0.04))
+```
+
+## Prostate
+
+```{r prostate, echo=FALSE, warning=FALSE}
+
+setwd("../code/Estimates")
+source("Prostate.R")
+
+gdata::keep(
+  finaldata_primary_7,
+  results_surrogate_7,
+  analysis,
+  prep_data,
+  print_results,
+  plot_cancer,
+  bootstrap_trial,
+    RoB,
+  sure = T
+)
+
+#exclude trials with 'High Risk' of bias
+finaldata_primary_7 <- left_join(finaldata_primary_7, RoB, by="trial_acro_sm") %>%
+  filter(RoB_overall_rating!="High risk")
+
+finaldata_primary_7 <- prep_data(finaldata_primary_7)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_7 <- results_surrogate_7 %>%
+  add_row(analysis(finaldata_primary_7, "Prostate", "7. Diagnostic yield of screening", "Primary", bootstrap_trial))
+
+# print results table for cancer
+print_results(results_surrogate_7, "Prostate")
+  
+# bubble plot
+plot <- plot_cancer(finaldata_primary_7,"Prostate")
+
+plot +
+  scale_y_continuous(trans="log", limits = c(0.1,6), breaks=c(0.5,1,1.5, 2, 3,5))+
+  scale_x_continuous(limits=c(0,0.07))
+```
+
+## Breast
+
+```{r breast, echo=FALSE, warning=FALSE}
+
+setwd("../code/Estimates")
+source("Breast.R")
+
+gdata::keep(
+  finaldata_primary_7,
+  results_surrogate_7,
+  analysis,
+  prep_data,
+  print_results,
+  plot_cancer,
+  bootstrap_trial,
+    RoB,
+  sure = T
+)
+
+#exclude trials with 'High Risk' of bias
+finaldata_primary_7 <- left_join(finaldata_primary_7, RoB, by="trial_acro_sm") %>%
+  filter(RoB_overall_rating!="High risk")
+
+finaldata_primary_7 <- prep_data(finaldata_primary_7)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_7 <- results_surrogate_7 %>%
+  add_row(analysis(finaldata_primary_7, "Breast", "7. Diagnostic yield of screening", "Primary", bootstrap_trial))
+
+# print results table for cancer
+print_results(results_surrogate_7, "Breast")
+  
+# bubble plot
+plot <- plot_cancer(finaldata_primary_7,"Breast")
+
+plot +
+  scale_y_continuous(trans="log", limits = c(0.1,6), breaks=c(0.5,1,1.5, 2, 3,5))+
+  scale_x_continuous(limits=c(0,0.02))
+
+```
+
+## Bowel
+
+```{r bowel, echo=FALSE, warning=FALSE}
+
+setwd("../code/Estimates")
+source("Bowel.R")
+
+gdata::keep(
+  finaldata_primary_7,
+  results_surrogate_7,
+  analysis,
+  prep_data,
+  print_results,
+  plot_cancer,
+  bootstrap_trial,
+    RoB,
+  sure = T
+)
+
+#exclude trials with 'High Risk' of bias
+finaldata_primary_7 <- left_join(finaldata_primary_7, RoB, by="trial_acro_sm") %>%
+  filter(RoB_overall_rating!="High risk")
+
+finaldata_primary_7 <- prep_data(finaldata_primary_7)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_7 <- results_surrogate_7 %>%
+  add_row(analysis(finaldata_primary_7, "Bowel", "7. Diagnostic yield of screening", "Primary", bootstrap_trial))
+
+# print results table for cancer
+print_results(results_surrogate_7, "Bowel")
+  
+# bubble plot
+plot <- plot_cancer(finaldata_primary_7,"Bowel")
+
+plot +
+  scale_y_continuous(trans="log", limits = c(0.1,6), breaks=c(0.5,1,1.5, 2, 3,5))+
+  scale_x_continuous(limits=c(0,0.15))
+```
+
+

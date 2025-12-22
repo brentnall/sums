@@ -1,0 +1,166 @@
+---
+title: "SUMS Primary Analysis - Surrogate 6"
+output: html_document
+date: "2024-05-21"
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+
+#Load packages
+library(gdata)
+library(flextable)
+
+#Load bootstrap function
+setwd("../code/Bootstrap")
+source("bootstrap_functions.R")
+
+
+#function to prepare data for analysis
+prep_data <- function (finaldata_primary) {
+  
+  finaldata_primary <- finaldata_primary %>%
+  # calculate weights (inverse variance 1/log(v))
+  mutate(weight_var = 1/vi_m) %>%
+  #only keep trials with available surrogate estimate
+  filter(!is.na(yi_s)) %>%
+  #count trials in analysis
+  mutate(N_trials=n_distinct(trial_acro_sm))
+  
+  return(finaldata_primary)
+}
+
+
+#Create results table for surrogate 1
+results_surrogate_6 <- data.frame(Cancer=character(),
+                                  Surrogate=character(),
+                                  Analysis=character(),
+                                  Ntrials=numeric(),
+                                  Intercept=numeric(),
+                                  Intercept_lb_ci=numeric(),
+                                  Intercept_ub_ci=numeric(),
+                                  Slope=numeric(),
+                                  Slope_lb_ci=numeric(),
+                                  Slope_ub_ci=numeric(),
+                                  Correlation=numeric(),
+                                  Correlation_lb_ci=numeric(),
+                                  Correlation_ub_ci=numeric(),
+                                  Rsquared=numeric(),
+                                  Rsquared_lb_ci=numeric(),
+                                  Rsquared_ub_ci=numeric()
+                                  )
+
+#function to print cancer-specific results
+print_results <- function(results_surrogate_6, cancer) {
+  results_surrogate_6 %>%
+    filter(Cancer == cancer) %>%
+    mutate(Slope_lb_ci = ifelse(Slope_lb_ci == "-99999", "-Inf", Slope_lb_ci)) %>%
+    mutate(Slope_ub_ci = ifelse(Slope_ub_ci == "99999", "Inf", Slope_ub_ci)) %>%
+    flextable() %>%
+    set_header_labels(
+      Ntrials = "N trials",
+      Intercept_lb_ci = "Intercept 95% CI; lower",
+      Intercept_ub_ci = "Intercept 95% CI; upper",
+      Slope_lb_ci = "Slope 95% CI; lower",
+      Slope_ub_ci = "Slope 95% CI; upper",
+      Correlation_lb_ci = "Correlation 95% CI; lower",
+      Correlation_ub_ci = "Correlation 95% CI; upper",
+      Rsquared = "R-squared",
+      Rsquared_lb_ci = "R-squared 95% CI; lower",
+      Rsquared_ub_ci = "R-squared 95% CI; upper"
+    ) %>%
+    autofit()
+}
+
+```
+
+# Primary analysis
+
+## All cancers
+```{r all, echo=FALSE, warning=FALSE}
+
+#Load cancer-specific data
+setwd("../code/Estimates")
+source("Ovarian.R")
+ovarian <- finaldata_primary_6 %>%
+  mutate(cancer="Ovarian")
+
+setwd("../code/Estimates")
+source("Prostate.R")
+prostate <- finaldata_primary_6 %>%
+  mutate(cancer="Prostate")
+
+setwd("../code/Estimates")
+source("Breast.R")
+breast <- finaldata_primary_6 %>%
+  mutate(cancer="Breast") %>%
+    #differentiate Mumbai Breast and Cervix
+    mutate(trial_acro_sm=ifelse(trial_acro_sm=="Mumbai Breast Cervix","Mumbai Breast",trial_acro_sm))
+
+setwd("../code/Estimates")
+source("Bowel.R")
+bowel <- finaldata_primary_6 %>%
+  mutate(cancer="Bowel")
+
+gdata::keep(
+  ovarian,
+  prostate,
+  breast,
+  bowel,
+  results_surrogate_6,
+  analysis,
+  prep_data,
+  min_N_trials,
+  bootstrap_trial,
+  sure = T
+)
+
+all_finaldata_primary_6 <- bind_rows(ovarian,
+                                     prostate,
+                                     breast,
+                                     bowel)
+
+
+all_finaldata_primary_6 <- prep_data(all_finaldata_primary_6) 
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_6 <- results_surrogate_6 %>%
+  add_row(analysis(all_finaldata_primary_6, "All", "6. Proportion of high- grade target cancers that are screen-detected", "All timepoints", bootstrap_trial))
+
+# bubble plot
+ggplot(all_finaldata_primary_6, aes(x = yi_s, y = exp(yi_m), weight=weight_var)) +
+  stat_smooth(method="lm", colour=NA, fullrange=T)+
+  geom_point(aes(size = weight_var, colour=cancer), shape = 16) + 
+  geom_abline(data=results_surrogate_6, aes(intercept = Intercept[Cancer=="All"], slope = Slope[Cancer=="All"])) +
+  #geom_abline(intercept=0, slope=1, linetype=2)+
+  geom_hline(yintercept = 1, linetype=3)+
+  #geom_vline(xintercept = 1, linetype=3)+
+    scale_y_continuous(trans="log", limits = c(0.3,2), breaks=c(0.5,1,1.5, 2)) +
+  scale_x_continuous(limits=c(0,1))+
+  labs(x="% of high- grade target cancers that are screen-detected", y="RR Mortality", colour="Cancer type", title="All timepoints")+
+  theme_bw() +
+  theme(plot.caption=element_text(hjust=0),  aspect.ratio = 1) +
+  guides(size = FALSE) 
+
+results_surrogate_6 %>%
+  mutate(Slope_lb_ci=ifelse(Slope_lb_ci=="-99999","-Inf",Slope_lb_ci)) %>%
+  mutate(Slope_ub_ci=ifelse(Slope_ub_ci=="99999","Inf",Slope_ub_ci)) %>%
+  flextable() %>%
+  set_header_labels(
+    Ntrials = "N trials",
+    Intercept_lb_ci="Intercept 95% CI; lower",
+    Intercept_ub_ci="Intercept 95% CI; upper",
+    Slope_lb_ci="Slope 95% CI; lower",
+    Slope_ub_ci="Slope 95% CI; upper",
+    Correlation_lb_ci="Correlation 95% CI; lower",
+    Correlation_ub_ci="Correlation 95% CI; upper",
+    Rsquared="R-squared",
+    Rsquared_lb_ci="R-squared 95% CI; lower",
+    Rsquared_ub_ci="R-squared 95% CI; upper") %>%
+  autofit()
+
+```

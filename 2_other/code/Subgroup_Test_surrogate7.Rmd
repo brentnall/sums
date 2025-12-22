@@ -1,0 +1,324 @@
+---
+title: "SUMS Subgroup Analysis - Test Type - Surrogate 7"
+output: html_document
+date: "2024-05-21"
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+
+#Load packages
+library(gdata)
+library(flextable)
+library(egg)
+
+#Load bootstrap function
+setwd("../code/Bootstrap")
+source("bootstrap_functions.R")
+
+#function to prepare data for analysis
+prep_data <- function (finaldata_primary) {
+  
+  finaldata_primary <- finaldata_primary %>%
+  #exclude trials with no unscreened control arm
+  filter(comparator_other_screening=="Not applicable") %>%
+  # calculate weights (inverse variance 1/log(v))
+  mutate(weight_var = 1/vi_m) %>%
+  #only keep trials with available surrogate estimate
+  filter(!is.na(yi_s)) %>%
+  #count trials in analysis
+  mutate(N_trials=n_distinct(trial_acro_sm))
+  
+  return(finaldata_primary)
+}
+
+# create results table for surrogate 1
+results_surrogate_7 <- data.frame(Cancer=character(),
+                                  Surrogate=character(),
+                                  Analysis=character(),
+                                  Ntrials=numeric(),
+                                  Intercept=numeric(),
+                                  Intercept_lb_ci=numeric(),
+                                  Intercept_ub_ci=numeric(),
+                                  Slope=numeric(),
+                                  Slope_lb_ci=numeric(),
+                                  Slope_ub_ci=numeric(),
+                                  Correlation=numeric(),
+                                  Correlation_lb_ci=numeric(),
+                                  Correlation_ub_ci=numeric(),
+                                  Rsquared=numeric(),
+                                  Rsquared_lb_ci=numeric(),
+                                  Rsquared_ub_ci=numeric()
+                                  )
+
+#function to print results
+print_results <- function(results_surrogate_7, cancer) {
+results_surrogate_7 %>%
+  mutate(Slope_lb_ci=ifelse(Slope_lb_ci=="-99999","-Inf",Slope_lb_ci)) %>%
+  mutate(Slope_ub_ci=ifelse(Slope_ub_ci=="99999","Inf",Slope_ub_ci)) %>%
+  flextable() %>%
+  set_header_labels(
+    Ntrials = "N trials",
+    Intercept_lb_ci="Intercept 95% CI; lower",
+    Intercept_ub_ci="Intercept 95% CI; upper",
+    Slope_lb_ci="Slope 95% CI; lower",
+    Slope_ub_ci="Slope 95% CI; upper",
+    Correlation_lb_ci="Correlation 95% CI; lower",
+    Correlation_ub_ci="Correlation 95% CI; upper",
+    Rsquared="R-squared",
+    Rsquared_lb_ci="R-squared 95% CI; lower",
+    Rsquared_ub_ci="R-squared 95% CI; upper") %>%
+  autofit()
+}
+
+#function for cancer-specific plots
+plot_cancer <- function(all_finaldata_primary_7, cancer_type){
+    
+  plot_cancer <- all_finaldata_primary_7 %>%
+  filter(cancer==cancer_type) %>%
+  ggplot(aes(x = yi_s, y = exp(yi_m), label=trial_acro_sm, weight=weight_var)) +
+  stat_smooth(method="lm", colour="black",linewidth=0.6, fullrange=T)+
+  geom_point(aes(size = weight_var, colour=test_subgroup), shape = 16) +
+  geom_hline(yintercept = 1, linetype=3)+
+  labs(title=cancer_type, x="Diagnostic yield of screening (%)", y="RR Mortality", colour="Test type")+
+  scale_y_continuous(trans="log", limits = c(0.3,6), breaks=c(0.5,1,2,5)) +
+  theme_bw() +
+  theme(plot.caption=element_text(hjust=0), aspect.ratio = 1)+
+  guides(size = FALSE, fill=F) 
+
+  return(plot_cancer)
+}
+```
+
+
+```{r lung, echo=FALSE, warning=FALSE}
+#LUNG 
+
+setwd("../code/Estimates")
+source("Lung.R")
+gdata::keep(
+  finaldata_primary_7,
+  results_surrogate_7,
+  prep_data,
+  analysis,
+  bootstrap_trial,
+  print_results,
+  plot_cancer,
+  sure = T
+)
+
+
+##LDCT 
+finaldata_primary_7_LDCT <- finaldata_primary_7 %>%
+  filter(str_detect(screening_test,"LDCT")) %>%
+  prep_data()
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_7 <- results_surrogate_7 %>%
+  add_row(analysis(finaldata_primary_7_LDCT, "Lung", "7. Diagnostic yield of screening", "Subgroup - LDCT", bootstrap_trial))
+
+
+##Chest X-ray ##only 2 trials
+# finaldata_primary_7_CXR <- finaldata_primary_7 %>%
+#   filter(str_detect(screening_test,"Chest X-ray") | str_detect(screening_test,"Chest x-ray") ) %>%
+#   prep_data()
+# 
+# #Analysis (see function in Allcancer_functions.R)
+# results_surrogate_7 <- results_surrogate_7 %>%
+#   add_row(analysis(finaldata_primary_7_CXR, "Lung", "7. Diagnostic yield of screening", "Subgroup - Chest X-ray", bootstrap_trial))
+
+```
+
+
+
+```{r breast, echo=FALSE, warning=FALSE}
+#BREAST
+
+setwd("../code/Estimates")
+source("Breast.R")
+gdata::keep(
+  finaldata_primary_7,
+  results_surrogate_7,
+  prep_data,
+  analysis,
+  bootstrap_trial,
+  print_results,
+  plot_cancer,
+  sure = T
+)
+
+
+##Mammography 
+finaldata_primary_7_Mammography <- finaldata_primary_7 %>%
+  filter(str_detect(screening_test,"Mammography")) %>%
+  prep_data()
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_7 <- results_surrogate_7 %>%
+  add_row(analysis(finaldata_primary_7_Mammography, "Breast", "7. Diagnostic yield of screening", "Subgroup - Mammography", bootstrap_trial))
+
+
+
+##Other screening tests 
+finaldata_primary_7_Other <- finaldata_primary_7 %>%
+  filter(!str_detect(screening_test,"Mammography")) %>%
+   prep_data()
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_7 <- results_surrogate_7 %>%
+  add_row(analysis(finaldata_primary_7_Other, "Breast", "7. Diagnostic yield of screening", "Subgroup - Other", bootstrap_trial))
+
+```
+
+
+```{r bowel, echo=FALSE, warning=FALSE}
+#BOWEL
+
+setwd("../code/Estimates")
+source("Bowel.R")
+gdata::keep(
+  finaldata_primary_7,
+  results_surrogate_7,
+  prep_data,
+  analysis,
+  bootstrap_trial,
+  print_results,
+  plot_cancer,
+  sure = T
+)
+
+
+##Flexible sigmoidoscopy
+finaldata_primary_7_FS <- finaldata_primary_7 %>%
+  filter(str_detect(screening_test,"Flexible sigmoidoscopy") | str_detect(screening_test,"Colonoscopy")) %>%
+  prep_data()
+
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_7 <- results_surrogate_7 %>%
+  add_row(analysis(finaldata_primary_7_FS, "Bowel", "7. Diagnostic yield of screening", "Subgroup - FS/Colonoscopy", bootstrap_trial))
+
+
+##FOBT
+finaldata_primary_7_FOBT <- finaldata_primary_7 %>%
+  filter(!str_detect(screening_test,"Flexible sigmoidoscopy")) %>%
+  filter(screening_test!="Colonoscopy") %>%
+  prep_data()
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_7 <- results_surrogate_7 %>%
+  add_row(analysis(finaldata_primary_7_FOBT, "Bowel", "7. Diagnostic yield of screening", "Subgroup - FOBT", bootstrap_trial))
+
+```
+
+# Results
+```{r results, echo=FALSE, warning=FALSE}
+
+print_results(results_surrogate_7)
+
+```
+# Plots
+```{r plots, echo=FALSE, warning=FALSE}
+
+setwd("../code/Estimates")
+source("Lung.R")
+lung <- finaldata_primary_7 %>%
+  mutate(cancer="Lung")
+
+
+setwd("../code/Estimates")
+source("Breast.R")
+breast <- finaldata_primary_7 %>%
+  mutate(cancer="Breast") %>%
+  mutate(trial_acro_sm=ifelse(trial_acro_sm=="Mumbai Breast Cervix","Mumbai Breast",trial_acro_sm))
+
+setwd("../code/Estimates")
+source("Bowel.R")
+bowel <- finaldata_primary_7 %>%
+  mutate(cancer="Bowel")
+
+gdata::keep(
+  lung,
+  breast,
+  bowel,
+  plot_cancer,
+  prep_data,
+  sure = T
+)
+
+all_finaldata_primary_7 <-
+  bind_rows(lung,
+            breast,
+            bowel)
+
+
+all_finaldata_primary_7 <- all_finaldata_primary_7 %>%
+  # weights (inverse variance 1/log(v))
+  mutate(weight_var = 1/vi_m) %>%
+  #subgroup - test type
+  mutate(test_subgroup=ifelse(str_detect(screening_test,"LDCT"),"LDCT", "")) %>%
+  mutate(test_subgroup=ifelse(str_detect(screening_test,"Chest X-ray"),"Chest X-ray", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse(str_detect(screening_test,"Chest x-ray"),"Chest X-ray", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse(str_detect(screening_test,"Mammography"),"Mammography", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse((!str_detect(screening_test,"Mammography")&cancer=="Breast"),"Other", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse((str_detect(screening_test,"Flexible sigmoidoscopy")| str_detect(screening_test,"Colonoscopy")) ,"Flexible sigmoidoscopy/Colonoscopy", test_subgroup)) %>%
+  mutate(test_subgroup=ifelse((test_subgroup!="Flexible sigmoidoscopy/Colonoscopy" & cancer=="Bowel"),"FOBT", test_subgroup)) %>%
+  prep_data()
+
+# Plot for cancer- and test- specific analyses
+ggplot(subset(all_finaldata_primary_7, cancer=="Breast"), aes(x = yi_s, y = exp(yi_m), label=trial_acro_sm, weight=weight_var)) +
+  stat_smooth(method="lm", colour="black", linewidth=0.6, fullrange=T)+
+  geom_point(aes(size = weight_var), shape = 16, colour="darkslateblue") +
+  geom_hline(yintercept = 1, linetype=3)+
+  labs(title="Breast",x="Diagnostic yield of screening (%)", y="RR Mortality")+
+  scale_x_continuous(limits=c(0,0.02))+
+  scale_y_continuous(trans="log", limits = c(0.3,6), breaks=c(0.5,1,2,5)) +
+  facet_wrap(~test_subgroup)+
+  theme_bw() +
+  theme(legend.position = "none",plot.caption=element_text(hjust=0), aspect.ratio = 1) 
+
+ggplot(subset(all_finaldata_primary_7, cancer=="Bowel"), aes(x = yi_s, y = exp(yi_m), label=trial_acro_sm, weight=weight_var)) +
+  stat_smooth( method="lm", colour="black", linewidth=0.6, fullrange=T)+
+  geom_point(aes(size = weight_var), shape = 16, colour="darkslateblue") +
+  geom_hline(yintercept = 1, linetype=3)+
+  labs(title="Bowel", x="Diagnostic yield of screening (%)", y="RR Mortality")+
+  scale_x_continuous(limits=c(0,0.15))+
+  scale_y_continuous(trans="log", limits = c(0.3,6), breaks=c(0.5,1,2,5)) +
+  facet_wrap(~test_subgroup, ncol=2)+
+  theme_bw() +
+  theme(legend.position = "none",plot.caption=element_text(hjust=0), aspect.ratio = 1) 
+
+
+# Plot by cancer
+#Lung
+lung_plot <- plot_cancer(all_finaldata_primary_7, "Lung") +
+    scale_x_continuous(limits=c(0,0.04))
+
+#Breast
+breast_plot <- plot_cancer(all_finaldata_primary_7, "Breast") +
+    scale_colour_manual(values=c("#00BFC4","#F8766D")) +
+    scale_x_continuous(limits=c(0,0.02))
+
+# Bowel
+bowel_plot <- plot_cancer(all_finaldata_primary_7, "Bowel") +
+    scale_colour_manual(values=c("#00BFC4","#F8766D")) +
+    scale_x_continuous(limits=c(0,0.15))
+
+ggarrange(
+  bowel_plot +
+    theme(
+      axis.title.x = element_blank()
+    ),
+  breast_plot +
+    theme(
+      axis.title.x = element_blank()
+    ),
+  lung_plot,
+  ncol = 1
+)
+
+```

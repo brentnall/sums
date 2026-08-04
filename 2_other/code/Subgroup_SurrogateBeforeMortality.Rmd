@@ -1,0 +1,415 @@
+---
+title: "SUMS Subgroup Analysis - Surrogate Measured Prior to Mortality Endpoint"
+output: html_document
+date: "2026-08-04"
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+
+#Load packages
+library(gdata)
+library(flextable)
+
+#Load bootstrap function
+setwd("../code/Bootstrap")
+source("bootstrap_functions.R")
+
+# Trials where surrogate was measured prior to the mortality endpoint:
+# Breast: Gothenburg Breast, HIP, Russia WHO Breast, Stockholm Breast, UK Age
+# Lung:   Czech study, ITALUNG, Lung Screening Study (LSS), LUSI
+# Prostate: UK CAP, Norrkoping, PLCO (Prostate)
+
+trials_prior <- c(
+  "Gothenburg Breast",
+  "HIP",
+  "Russia WHO Breast",
+  "Stockholm Breast",
+  "UK Age",
+  "Czech study",
+  "ITALUNG",
+  "Lung Screening Study (LSS)",
+  "LUSI",
+  "UK CAP",
+  "Norrkoping",
+  "PLCO (Prostate)"
+)
+
+#function to prepare data for analysis
+prep_data <- function (finaldata_primary) {
+  
+  finaldata_primary <- finaldata_primary %>%
+  # calculate weights (inverse variance 1/log(v))
+  mutate(weight_var = 1/vi_m) %>%
+  #only keep trials with available surrogate estimate
+  filter(!is.na(yi_s)) %>%
+  #count trials in analysis
+  mutate(N_trials=n_distinct(trial_acro_sm))
+  
+  return(finaldata_primary)
+}
+
+#function to print results table
+print_results <- function(results_df) {
+  results_df %>%
+    mutate(Slope_lb_ci = ifelse(Slope_lb_ci == "-99999", "-Inf", Slope_lb_ci)) %>%
+    mutate(Slope_ub_ci = ifelse(Slope_ub_ci == "99999", "Inf", Slope_ub_ci)) %>%
+    flextable() %>%
+    set_header_labels(
+      Ntrials = "N trials",
+      Intercept_lb_ci = "Intercept 95% CI; lower",
+      Intercept_ub_ci = "Intercept 95% CI; upper",
+      Slope_lb_ci = "Slope 95% CI; lower",
+      Slope_ub_ci = "Slope 95% CI; upper",
+      Correlation_lb_ci = "Correlation 95% CI; lower",
+      Correlation_ub_ci = "Correlation 95% CI; upper",
+      Rsquared = "R-squared",
+      Rsquared_lb_ci = "R-squared 95% CI; lower",
+      Rsquared_ub_ci = "R-squared 95% CI; upper"
+    ) %>%
+    autofit()
+}
+
+```
+
+# Subgroup: trials where surrogate measured prior to mortality endpoint
+
+Trials included:
+
+- **Breast**: Gothenburg Breast, HIP NY, Russia / WHO, Stockholm, UK Age
+- **Lung**: Czech Study, ITALUNG, LSS, LUSI
+- **Prostate**: CAP, Norrkoping, PLCO
+
+---
+
+## Surrogate 4: Absolute incidence of early stage cancer
+
+```{r surrogate4, echo=FALSE, warning=FALSE}
+
+# Create results table
+results_surrogate_4 <- data.frame(Cancer=character(),
+                                  Surrogate=character(),
+                                  Analysis=character(),
+                                  Ntrials=numeric(),
+                                  Intercept=numeric(),
+                                  Intercept_lb_ci=numeric(),
+                                  Intercept_ub_ci=numeric(),
+                                  Slope=numeric(),
+                                  Slope_lb_ci=numeric(),
+                                  Slope_ub_ci=numeric(),
+                                  Correlation=numeric(),
+                                  Correlation_lb_ci=numeric(),
+                                  Correlation_ub_ci=numeric(),
+                                  Rsquared=numeric(),
+                                  Rsquared_lb_ci=numeric(),
+                                  Rsquared_ub_ci=numeric()
+                                  )
+
+#Load cancer-specific data
+setwd("../code/Estimates")
+source("Lung.R")
+lung_4 <- finaldata_primary_4 %>%
+  mutate(cancer="Lung")
+
+setwd("../code/Estimates")
+source("Prostate.R")
+prostate_4 <- finaldata_primary_4 %>%
+  mutate(cancer="Prostate")
+
+setwd("../code/Estimates")
+source("Breast.R")
+breast_4 <- finaldata_primary_4 %>%
+  mutate(cancer="Breast") %>%
+  mutate(trial_acro_sm=ifelse(trial_acro_sm=="Mumbai Breast Cervix","Mumbai Breast",trial_acro_sm))
+
+gdata::keep(
+  lung_4,
+  prostate_4,
+  breast_4,
+  trials_prior,
+  results_surrogate_4,
+  analysis,
+  prep_data,
+  print_results,
+  bootstrap_trial,
+  sure = T
+)
+
+# Combine and restrict to trials where surrogate was measured prior to mortality
+all_data_4 <- bind_rows(lung_4, prostate_4, breast_4) %>%
+  filter(trial_acro_sm %in% trials_prior)
+
+all_data_4 <- prep_data(all_data_4)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_4 <- results_surrogate_4 %>%
+  add_row(analysis(all_data_4, "All", "4. Absolute incidence of early stage cancer", "Surrogate prior to mortality", bootstrap_trial))
+
+# Print results table
+print_results(results_surrogate_4)
+
+# Bubble plot
+ggplot(all_data_4, aes(x = exp(yi_s), y = exp(yi_m), label=trial_acro_sm, weight=weight_var)) +
+  geom_point(aes(size = weight_var, colour=cancer), shape = 16) +
+  geom_abline(data=results_surrogate_4, aes(intercept = Intercept[Cancer=="All"], slope = Slope[Cancer=="All"])) +
+  geom_hline(yintercept = 1, linetype=3)+
+  geom_vline(xintercept = 1, linetype=3)+
+  scale_x_continuous(trans="log", limits = c(0.3,6), breaks=c(0.5,1,2,5)) +
+  scale_y_continuous(trans="log", limits = c(0.3,6), breaks=c(0.5,1,2,5)) +
+  labs(x="RR early stage incidence", y="RR Mortality", colour="Cancer type")+
+  geom_text(hjust=-0.05, vjust=-0.5)+
+  theme_bw() +
+  theme(plot.caption=element_text(hjust=0), aspect.ratio = 1) +
+  guides(size = FALSE)
+
+```
+
+---
+
+## Surrogate 5: Proportion of target cancers that are screen-detected
+
+```{r surrogate5, echo=FALSE, warning=FALSE}
+
+# Create results table
+results_surrogate_5 <- data.frame(Cancer=character(),
+                                  Surrogate=character(),
+                                  Analysis=character(),
+                                  Ntrials=numeric(),
+                                  Intercept=numeric(),
+                                  Intercept_lb_ci=numeric(),
+                                  Intercept_ub_ci=numeric(),
+                                  Slope=numeric(),
+                                  Slope_lb_ci=numeric(),
+                                  Slope_ub_ci=numeric(),
+                                  Correlation=numeric(),
+                                  Correlation_lb_ci=numeric(),
+                                  Correlation_ub_ci=numeric(),
+                                  Rsquared=numeric(),
+                                  Rsquared_lb_ci=numeric(),
+                                  Rsquared_ub_ci=numeric()
+                                  )
+
+#Load cancer-specific data
+setwd("../code/Estimates")
+source("Lung.R")
+lung_5 <- finaldata_primary_5 %>%
+  mutate(cancer="Lung")
+
+setwd("../code/Estimates")
+source("Prostate.R")
+prostate_5 <- finaldata_primary_5 %>%
+  mutate(cancer="Prostate")
+
+setwd("../code/Estimates")
+source("Breast.R")
+breast_5 <- finaldata_primary_5 %>%
+  mutate(cancer="Breast") %>%
+  mutate(trial_acro_sm=ifelse(trial_acro_sm=="Mumbai Breast Cervix","Mumbai Breast",trial_acro_sm))
+
+gdata::keep(
+  lung_5,
+  prostate_5,
+  breast_5,
+  trials_prior,
+  results_surrogate_5,
+  analysis,
+  prep_data,
+  print_results,
+  bootstrap_trial,
+  sure = T
+)
+
+# Combine and restrict to trials where surrogate was measured prior to mortality
+all_data_5 <- bind_rows(lung_5, prostate_5, breast_5) %>%
+  filter(trial_acro_sm %in% trials_prior)
+
+all_data_5 <- prep_data(all_data_5)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_5 <- results_surrogate_5 %>%
+  add_row(analysis(all_data_5, "All", "5. Proportion of target cancers that are screen-detected", "Surrogate prior to mortality", bootstrap_trial))
+
+# Print results table
+print_results(results_surrogate_5)
+
+# Bubble plot
+ggplot(all_data_5, aes(x = yi_s, y = exp(yi_m), label=trial_acro_sm, weight=weight_var)) +
+  geom_point(aes(size = weight_var, colour=cancer), shape = 16) +
+  geom_abline(data=results_surrogate_5, aes(intercept = Intercept[Cancer=="All"], slope = Slope[Cancer=="All"])) +
+  geom_hline(yintercept = 1, linetype=3)+
+  scale_y_continuous(trans="log", limits = c(0.3,6), breaks=c(0.5,1,2,5)) +
+  scale_x_continuous(limits=c(0,1))+
+  labs(x="% of target cancers that are screen-detected", y="RR Mortality", colour="Cancer type")+
+  geom_text(hjust=-0.05, vjust=-0.5)+
+  theme_bw() +
+  theme(plot.caption=element_text(hjust=0), aspect.ratio = 1) +
+  guides(size = FALSE)
+
+```
+
+---
+
+## Surrogate 6: Proportion of high-grade target cancers that are screen-detected
+
+```{r surrogate6, echo=FALSE, warning=FALSE}
+
+# Create results table
+results_surrogate_6 <- data.frame(Cancer=character(),
+                                  Surrogate=character(),
+                                  Analysis=character(),
+                                  Ntrials=numeric(),
+                                  Intercept=numeric(),
+                                  Intercept_lb_ci=numeric(),
+                                  Intercept_ub_ci=numeric(),
+                                  Slope=numeric(),
+                                  Slope_lb_ci=numeric(),
+                                  Slope_ub_ci=numeric(),
+                                  Correlation=numeric(),
+                                  Correlation_lb_ci=numeric(),
+                                  Correlation_ub_ci=numeric(),
+                                  Rsquared=numeric(),
+                                  Rsquared_lb_ci=numeric(),
+                                  Rsquared_ub_ci=numeric()
+                                  )
+
+#Load cancer-specific data
+setwd("../code/Estimates")
+source("Prostate.R")
+prostate_6 <- finaldata_primary_6 %>%
+  mutate(cancer="Prostate")
+
+setwd("../code/Estimates")
+source("Breast.R")
+breast_6 <- finaldata_primary_6 %>%
+  mutate(cancer="Breast") %>%
+  mutate(trial_acro_sm=ifelse(trial_acro_sm=="Mumbai Breast Cervix","Mumbai Breast",trial_acro_sm))
+
+gdata::keep(
+  prostate_6,
+  breast_6,
+  trials_prior,
+  results_surrogate_6,
+  analysis,
+  prep_data,
+  print_results,
+  bootstrap_trial,
+  sure = T
+)
+
+# Combine and restrict to trials where surrogate was measured prior to mortality
+all_data_6 <- bind_rows(prostate_6, breast_6) %>%
+  filter(trial_acro_sm %in% trials_prior)
+
+all_data_6 <- prep_data(all_data_6)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_6 <- results_surrogate_6 %>%
+  add_row(analysis(all_data_6, "All", "6. Proportion of high-grade target cancers that are screen-detected", "Surrogate prior to mortality", bootstrap_trial))
+
+# Print results table
+print_results(results_surrogate_6)
+
+# Bubble plot
+ggplot(all_data_6, aes(x = yi_s, y = exp(yi_m), label=trial_acro_sm, weight=weight_var)) +
+  geom_point(aes(size = weight_var, colour=cancer), shape = 16) +
+  geom_abline(data=results_surrogate_6, aes(intercept = Intercept[Cancer=="All"], slope = Slope[Cancer=="All"])) +
+  geom_hline(yintercept = 1, linetype=3)+
+  scale_y_continuous(trans="log", limits = c(0.3,2), breaks=c(0.5,1,1.5,2)) +
+  scale_x_continuous(limits=c(0,1))+
+  labs(x="% of high-grade target cancers that are screen-detected", y="RR Mortality", colour="Cancer type")+
+  geom_text(hjust=-0.05, vjust=-0.5)+
+  theme_bw() +
+  theme(plot.caption=element_text(hjust=0), aspect.ratio = 1) +
+  guides(size = FALSE)
+
+```
+
+---
+
+## Surrogate 7: Diagnostic yield of screening
+
+```{r surrogate7, echo=FALSE, warning=FALSE}
+
+# Create results table
+results_surrogate_7 <- data.frame(Cancer=character(),
+                                  Surrogate=character(),
+                                  Analysis=character(),
+                                  Ntrials=numeric(),
+                                  Intercept=numeric(),
+                                  Intercept_lb_ci=numeric(),
+                                  Intercept_ub_ci=numeric(),
+                                  Slope=numeric(),
+                                  Slope_lb_ci=numeric(),
+                                  Slope_ub_ci=numeric(),
+                                  Correlation=numeric(),
+                                  Correlation_lb_ci=numeric(),
+                                  Correlation_ub_ci=numeric(),
+                                  Rsquared=numeric(),
+                                  Rsquared_lb_ci=numeric(),
+                                  Rsquared_ub_ci=numeric()
+                                  )
+
+#Load cancer-specific data
+setwd("../code/Estimates")
+source("Lung.R")
+lung_7 <- finaldata_primary_7 %>%
+  #exclude trials with no unscreened control arm (as per primary analysis for surrogate 7)
+  filter(comparator_other_screening=="Not applicable") %>%
+  mutate(cancer="Lung")
+
+setwd("../code/Estimates")
+source("Prostate.R")
+prostate_7 <- finaldata_primary_7 %>%
+  filter(comparator_other_screening=="Not applicable") %>%
+  mutate(cancer="Prostate")
+
+setwd("../code/Estimates")
+source("Breast.R")
+breast_7 <- finaldata_primary_7 %>%
+  filter(comparator_other_screening=="Not applicable") %>%
+  mutate(cancer="Breast") %>%
+  mutate(trial_acro_sm=ifelse(trial_acro_sm=="Mumbai Breast Cervix","Mumbai Breast",trial_acro_sm))
+
+gdata::keep(
+  lung_7,
+  prostate_7,
+  breast_7,
+  trials_prior,
+  results_surrogate_7,
+  analysis,
+  prep_data,
+  print_results,
+  bootstrap_trial,
+  sure = T
+)
+
+# Combine and restrict to trials where surrogate was measured prior to mortality
+all_data_7 <- bind_rows(lung_7, prostate_7, breast_7) %>%
+  filter(trial_acro_sm %in% trials_prior)
+
+all_data_7 <- prep_data(all_data_7)
+
+#Analysis (see function in Allcancer_functions.R)
+results_surrogate_7 <- results_surrogate_7 %>%
+  add_row(analysis(all_data_7, "All", "7. Diagnostic yield of screening", "Surrogate prior to mortality", bootstrap_trial))
+
+# Print results table
+print_results(results_surrogate_7)
+
+# Bubble plot
+ggplot(all_data_7, aes(x = yi_s, y = exp(yi_m), label=trial_acro_sm, weight=weight_var)) +
+  geom_point(aes(size = weight_var, colour=cancer), shape = 16) +
+  geom_abline(data=results_surrogate_7, aes(intercept = Intercept[Cancer=="All"], slope = Slope[Cancer=="All"])) +
+  geom_hline(yintercept = 1, linetype=3)+
+  scale_y_continuous(trans="log", limits = c(0.1,6), breaks=c(0.5,1,1.5,2,3,5)) +
+  labs(x="Diagnostic yield of screening (%)", y="RR Mortality", colour="Cancer type")+
+  geom_text(hjust=-0.05, vjust=-0.5)+
+  theme_bw() +
+  theme(plot.caption=element_text(hjust=0), aspect.ratio = 1) +
+  guides(size = FALSE)
+
+```

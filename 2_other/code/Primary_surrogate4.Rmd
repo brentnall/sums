@@ -1,7 +1,7 @@
 ---
 title: "SUMS Primary Analysis - Surrogate 4"
 output: html_document
-date: "2025-05-01"
+date: "2026-09-23"
 ---
 
 ```{r setup, include=FALSE} 
@@ -459,6 +459,43 @@ ggplot(all_finaldata_primary_4, aes(x = exp(yi_s), y = exp(yi_m), weight=weight_
   theme_bw() +
   theme(plot.caption=element_text(hjust=0),  aspect.ratio = 1) +
   guides(size = FALSE) 
+
+
+# bubble plot, increase size
+fig2<-ggplot(all_finaldata_primary_4, aes(x = exp(yi_s), y = exp(yi_m), weight=weight_var)) +
+  stat_smooth(method="lm", colour=NA, fullrange=T)+
+    geom_point(aes(size = weight_var, colour=cancer), shape = 16) +
+  geom_abline(data=results_surrogate_4, aes(intercept = Intercept[Cancer=="All"], slope = Slope[Cancer=="All"])) +
+  #geom_abline(intercept=0, slope=1, linetype=2)+
+  geom_hline(yintercept = 1, linetype=3)+
+  geom_vline(xintercept = 1, linetype=3)+
+    scale_x_continuous(trans="log", limits = c(0.5,6), breaks=c(0.5,1,2,5)) + 
+    scale_y_continuous(trans="log", limits = c(0.3,2), breaks=c(0.5,1,2,5)) +
+    labs(x="RR early stage incidence", y="RR Mortality")+
+    theme_bw() +
+    theme(
+        plot.caption = element_text(hjust = 0),
+        aspect.ratio = 1,
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14)
+    ) +
+    guides(
+        size = FALSE,
+        colour = guide_legend(
+            override.aes = list(size = 5)
+        )
+    )+
+    scale_colour_discrete(name = "Cancer type")
+
+fig2
+
+ggsave("../code/plots/fig2.png", plot = fig2,
+       width = 6, height = 6, units = "in", dpi = 300)
+ 
+ggsave("../code/plots/fig2.pdf", plot = fig2,
+       width = 6, height = 6, units = "in")
+
+
 
 ```
 
